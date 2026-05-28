@@ -37,6 +37,7 @@ Expected result:
 - `dist/LabBuddy-iOS-prototype-latest.zip.sha256` records SHA-256 checksums.
 - The zip includes `LabBuddy.xcodeproj`, Swift source, assets, README, acceptance docs, and scripts.
 - The zip includes `Open-LabBuddy.command` for double-click opening after Xcode is installed.
+- The zip includes `PACKAGE_MANIFEST.txt` with package version and verification commands.
 
 ## First Experience Checklist
 

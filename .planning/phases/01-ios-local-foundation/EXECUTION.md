@@ -91,6 +91,11 @@
 - Packaging now emits `dist/LabBuddy-iOS-prototype-latest.zip.sha256`.
 - Verified the commit-specific zip and latest zip are byte-identical and pass SHA-256 checks.
 
+## 2026-05-28 package-manifest follow-up
+
+- Packaging now includes `PACKAGE_MANIFEST.txt` at the zip root.
+- The manifest records package version, open command, verification command, package names, and the Xcode requirement.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
@@ -101,4 +106,5 @@
 - `dist/LabBuddy-iOS-prototype-latest.zip` matches the commit-specific zip.
 - `Open-LabBuddy.command` exits with the expected Xcode setup prompt in the current environment.
 - `shasum -a 256 -c dist/LabBuddy-iOS-prototype-latest.zip.sha256` passes after packaging.
+- `PACKAGE_MANIFEST.txt` is present at the root of `dist/LabBuddy-iOS-prototype-latest.zip`.
 - Full `xcodebuild` verification is blocked until Xcode is installed. Current active developer directory only provides Command Line Tools.
