@@ -114,59 +114,59 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PLAT-01 | TBD | Pending |
-| PLAT-02 | TBD | Pending |
-| PLAT-03 | TBD | Pending |
-| PROT-01 | TBD | Pending |
-| PROT-02 | TBD | Pending |
-| PROT-03 | TBD | Pending |
-| PROT-04 | TBD | Pending |
-| PROT-05 | TBD | Pending |
-| SCAL-01 | TBD | Pending |
-| SCAL-02 | TBD | Pending |
-| SCAL-03 | TBD | Pending |
-| SCAL-04 | TBD | Pending |
-| CALC-01 | TBD | Pending |
-| CALC-02 | TBD | Pending |
-| CALC-03 | TBD | Pending |
-| CALC-04 | TBD | Pending |
-| SCHD-01 | TBD | Pending |
-| SCHD-02 | TBD | Pending |
-| SCHD-03 | TBD | Pending |
-| SCHD-04 | TBD | Pending |
-| SCHD-05 | TBD | Pending |
-| SCHD-06 | TBD | Pending |
-| TIME-01 | TBD | Pending |
-| TIME-02 | TBD | Pending |
-| TIME-03 | TBD | Pending |
-| TIME-04 | TBD | Pending |
-| TIME-05 | TBD | Pending |
-| TIME-06 | TBD | Pending |
-| RECD-01 | TBD | Pending |
-| RECD-02 | TBD | Pending |
-| RECD-03 | TBD | Pending |
-| RECD-04 | TBD | Pending |
-| INVT-01 | TBD | Pending |
-| INVT-02 | TBD | Pending |
-| INVT-03 | TBD | Pending |
-| INVT-04 | TBD | Pending |
-| INVT-05 | TBD | Pending |
-| INVT-06 | TBD | Pending |
-| CARD-01 | TBD | Pending |
-| CARD-02 | TBD | Pending |
-| CARD-03 | TBD | Pending |
-| CARD-04 | TBD | Pending |
-| CARD-05 | TBD | Pending |
-| CARD-06 | TBD | Pending |
-| UX-01 | TBD | Pending |
-| UX-02 | TBD | Pending |
-| UX-03 | TBD | Pending |
+| PLAT-01 | Phase 1 | Pending |
+| PLAT-02 | Phase 1 | Pending |
+| PLAT-03 | Phase 1 | Pending |
+| PROT-01 | Phase 2 | Pending |
+| PROT-02 | Phase 2 | Pending |
+| PROT-03 | Phase 2 | Pending |
+| PROT-04 | Phase 2 | Pending |
+| PROT-05 | Phase 2 | Pending |
+| SCAL-01 | Phase 3 | Pending |
+| SCAL-02 | Phase 3 | Pending |
+| SCAL-03 | Phase 3 | Pending |
+| SCAL-04 | Phase 3 | Pending |
+| CALC-01 | Phase 3 | Pending |
+| CALC-02 | Phase 3 | Pending |
+| CALC-03 | Phase 3 | Pending |
+| CALC-04 | Phase 3 | Pending |
+| SCHD-01 | Phase 4 | Pending |
+| SCHD-02 | Phase 4 | Pending |
+| SCHD-03 | Phase 4 | Pending |
+| SCHD-04 | Phase 4 | Pending |
+| SCHD-05 | Phase 4 | Pending |
+| SCHD-06 | Phase 4 | Pending |
+| TIME-01 | Phase 5 | Pending |
+| TIME-02 | Phase 5 | Pending |
+| TIME-03 | Phase 5 | Pending |
+| TIME-04 | Phase 5 | Pending |
+| TIME-05 | Phase 5 | Pending |
+| TIME-06 | Phase 5 | Pending |
+| RECD-01 | Phase 6 | Pending |
+| RECD-02 | Phase 6 | Pending |
+| RECD-03 | Phase 6 | Pending |
+| RECD-04 | Phase 6 | Pending |
+| INVT-01 | Phase 7 | Pending |
+| INVT-02 | Phase 7 | Pending |
+| INVT-03 | Phase 7 | Pending |
+| INVT-04 | Phase 7 | Pending |
+| INVT-05 | Phase 7 | Pending |
+| INVT-06 | Phase 7 | Pending |
+| CARD-01 | Phase 8 | Pending |
+| CARD-02 | Phase 8 | Pending |
+| CARD-03 | Phase 8 | Pending |
+| CARD-04 | Phase 8 | Pending |
+| CARD-05 | Phase 8 | Pending |
+| CARD-06 | Phase 8 | Pending |
+| UX-01 | Phase 1 | Pending |
+| UX-02 | Phase 5 | Pending |
+| UX-03 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 47 total
-- Mapped to phases: 0
-- Unmapped: 47
+- Mapped to phases: 47
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-28*
-*Last updated: 2026-05-28 after initial definition*
+*Last updated: 2026-05-28 after roadmap creation*
