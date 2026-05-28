@@ -35,6 +35,12 @@
 - Added mass concentration, liquid dilution, and percentage concentration modes.
 - Calculator results update locally and expose a first copy-ready interaction state.
 
+## 2026-05-28 report-loop follow-up
+
+- Added a Bench Mode completion action that marks all run steps complete, clears the run timer, and opens the Data Card.
+- Data Card preview now includes a local report-summary draft based on run metadata.
+- The report action now changes state locally instead of acting as a placeholder close button.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.

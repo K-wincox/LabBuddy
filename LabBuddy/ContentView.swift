@@ -179,6 +179,10 @@ private struct TodayView: View {
                         }
                         completedStepIDs = next
                     },
+                    completeRun: {
+                        markRunComplete(run)
+                        selectedDataCardRun = run
+                    },
                     startTimer: { startTimer(for: run) }
                 )
             }
@@ -214,6 +218,14 @@ private struct TodayView: View {
 
     private func stopTimer(_ timer: ActiveLabTimer) {
         activeTimers.removeAll { $0.id == timer.id }
+    }
+
+    private func markRunComplete(_ run: LabRun) {
+        var next = completedStepIDs
+        run.steps.forEach { next.insert($0.id) }
+        completedStepIDs = next
+        activeTimers.removeAll { $0.runID == run.id }
+        focusedRun = nil
     }
 
     private func loadTimers() {
@@ -431,16 +443,24 @@ private struct BenchModeView: View {
     let completedStepIDs: Set<String>
     let activeTimer: ActiveLabTimer?
     let toggleStep: (String) -> Void
+    let completeRun: () -> Void
     let startTimer: () -> Void
     @Environment(\.dismiss) private var dismiss
+
+    private var doneCount: Int {
+        run.steps.filter { completedStepIDs.contains($0.id) }.count
+    }
 
     private var currentStep: LabStep? {
         run.steps.first { !completedStepIDs.contains($0.id) } ?? run.steps.last
     }
 
     private var completionText: String {
-        let doneCount = run.steps.filter { completedStepIDs.contains($0.id) }.count
         return "\(doneCount)/\(run.steps.count)"
+    }
+
+    private var isRunComplete: Bool {
+        doneCount == run.steps.count
     }
 
     var body: some View {
@@ -523,6 +543,14 @@ private struct BenchModeView: View {
                         )
                     }
                 }
+
+                Button(action: completeRun) {
+                    Label(isRunComplete ? "生成结果卡片" : "完成本实验并生成卡片", systemImage: isRunComplete ? "rectangle.on.rectangle.angled" : "checkmark.seal.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 58)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
 
                 Spacer(minLength: 0)
             }
@@ -908,9 +936,14 @@ private struct DataCardPreview: View {
     let run: LabRun
     let completedStepIDs: Set<String>
     @Environment(\.dismiss) private var dismiss
+    @State private var reportCopied = false
 
     private var doneCount: Int {
         run.steps.filter { completedStepIDs.contains($0.id) }.count
+    }
+
+    private var reportText: String {
+        "老师好，我刚完成了\(run.title)。Protocol：\(run.protocolName)；规模：\(run.scaledVolumeLabel)；步骤完成：\(doneCount)/\(run.steps.count)。关键条件和结果图已整理在 LabBuddy 卡片中。"
     }
 
     var body: some View {
@@ -958,10 +991,22 @@ private struct DataCardPreview: View {
                 .padding(18)
                 .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
 
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("汇报摘要")
+                        .font(.headline)
+                    Text(reportText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
                 Button {
-                    dismiss()
+                    reportCopied = true
                 } label: {
-                    Label("复制汇报摘要", systemImage: "doc.on.doc")
+                    Label(reportCopied ? "摘要已准备复制" : "生成汇报摘要", systemImage: reportCopied ? "checkmark.circle.fill" : "doc.on.doc")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
