@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 Phase: 1 of 8 (iOS Local Foundation)
 Plan: 3 of 3 in current phase
 Status: Phase 1 implementation complete; awaiting Xcode runtime verification
-Last activity: 2026-05-28 — Added local iOS preflight script for Xcode setup and simulator-build verification.
+Last activity: 2026-05-28 — Added Phase 1 local acceptance checklist and strengthened iOS preflight checks.
 
 Progress: [█░░░░░░░░░] 11%
 

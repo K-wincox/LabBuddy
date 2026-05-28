@@ -12,6 +12,12 @@ SOURCES=(
   "LabBuddy/SampleData.swift"
   "LabBuddy/ContentView.swift"
 )
+REQUIRED_FILES=(
+  "$PROJECT/project.pbxproj"
+  "$PROJECT/xcshareddata/xcschemes/$SCHEME.xcscheme"
+  "LabBuddy/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+  "${SOURCES[@]}"
+)
 JSON_FILES=(
   "LabBuddy/Assets.xcassets/Contents.json"
   "LabBuddy/Assets.xcassets/AccentColor.colorset/Contents.json"
@@ -21,15 +27,29 @@ JSON_FILES=(
 
 echo "== LabBuddy local iOS preflight =="
 
+echo "Checking required files..."
+for path in "${REQUIRED_FILES[@]}"; do
+  if [[ ! -f "$path" ]]; then
+    echo "Missing required file: $path" >&2
+    exit 1
+  fi
+done
+
 echo "Checking Swift sources..."
 swiftc -typecheck "${SOURCES[@]}"
 
 echo "Checking Xcode project..."
 plutil -lint "$PROJECT/project.pbxproj" >/dev/null
 xmllint --noout "$PROJECT/xcshareddata/xcschemes/$SCHEME.xcscheme"
+grep -q "BlueprintName = \"$SCHEME\"" "$PROJECT/xcshareddata/xcschemes/$SCHEME.xcscheme"
 
 echo "Checking asset JSON..."
 ruby -rjson -e 'ARGV.each { |path| JSON.parse(File.read(path)); puts "#{path}: OK" }' "${JSON_FILES[@]}"
+
+echo "Checking AppIcon dimensions..."
+ICON_INFO="$(sips -g pixelWidth -g pixelHeight "LabBuddy/Assets.xcassets/AppIcon.appiconset/AppIcon.png" 2>/dev/null)"
+echo "$ICON_INFO" | grep -q "pixelWidth: 1024"
+echo "$ICON_INFO" | grep -q "pixelHeight: 1024"
 
 if ! xcrun --find xcodebuild >/dev/null 2>&1; then
   echo

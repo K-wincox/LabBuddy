@@ -59,10 +59,15 @@
 - The script builds the app for iOS Simulator when full Xcode is available.
 - In the current Command Line Tools-only environment, the script exits with an explicit Xcode setup instruction after passing static checks.
 
+## 2026-05-28 acceptance follow-up
+
+- Added `docs/PHASE1_ACCEPTANCE.md` to make local Xcode acceptance explicit.
+- Expanded preflight checks for required files, shared scheme identity, and AppIcon dimensions.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
 - `swiftc -typecheck LabBuddy/LabBuddyApp.swift LabBuddy/Models.swift LabBuddy/SampleData.swift LabBuddy/ContentView.swift` passes.
 - Xcode project, scheme, and asset JSON files validate structurally.
-- `./scripts/check-ios-local.sh` passes static checks and exits at the expected Xcode-not-installed gate in this environment.
+- `./scripts/check-ios-local.sh` passes required-file, Swift source, project, scheme, asset JSON, and AppIcon dimension checks, then exits at the expected Xcode-not-installed gate in this environment.
 - Full `xcodebuild` verification is blocked until Xcode is installed. Current active developer directory only provides Command Line Tools.

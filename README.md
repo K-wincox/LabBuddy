@@ -25,6 +25,8 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
 Then run the checker again. With full Xcode available, the script validates the project and builds the app for iOS Simulator.
 
+Detailed local acceptance steps live in [docs/PHASE1_ACCEPTANCE.md](docs/PHASE1_ACCEPTANCE.md).
+
 ## Current prototype
 
 - Native SwiftUI app, iOS 17.0 target.
