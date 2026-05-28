@@ -27,6 +27,23 @@ struct LabRun: Identifiable, Hashable {
     let steps: [LabStep]
 }
 
+struct ActiveLabTimer: Identifiable, Codable, Equatable {
+    let id: String
+    let runID: String
+    let runTitle: String
+    let stepTitle: String
+    let startedAt: Date
+    let endsAt: Date
+
+    var remainingSeconds: Int {
+        max(0, Int(endsAt.timeIntervalSinceNow.rounded()))
+    }
+
+    var isFinished: Bool {
+        remainingSeconds == 0
+    }
+}
+
 struct ProtocolIngredient: Identifiable, Hashable {
     let id = UUID()
     let name: String

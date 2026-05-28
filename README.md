@@ -15,8 +15,10 @@ LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first u
 - No sign-in, cloud sync, account system, AI provider, or external dependency.
 - Today tab with seeded cell experiment, plasmid prep, and Western blot/gel work.
 - Step completion state persists locally with `@AppStorage`.
+- App-local labeled timers can be started from experiment cards and persist between launches.
 - Protocol tab previews proportional recipe scaling.
 - Tools tab shows common buffer/calculation examples.
+- Share buttons open a first Data Card preview with run metadata and LabBuddy branding.
 
 ## Verification status
 
