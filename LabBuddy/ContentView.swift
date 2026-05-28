@@ -1,14 +1,18 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var importedRuns: [LabRun] = []
+
     var body: some View {
         TabView {
-            TodayView()
+            TodayView(importedRuns: importedRuns)
                 .tabItem {
                     Label("今日", systemImage: "calendar")
                 }
 
-            ProtocolsView()
+            ProtocolsView { labProtocol, targetVolume in
+                importRun(from: labProtocol, targetVolume: targetVolume)
+            }
                 .tabItem {
                     Label("Protocol", systemImage: "list.clipboard")
                 }
@@ -19,10 +23,84 @@ struct ContentView: View {
                 }
         }
         .tint(.teal)
+        .onAppear(perform: loadImportedRuns)
+        .onChange(of: importedRuns) {
+            saveImportedRuns(importedRuns)
+        }
+    }
+
+    private func importRun(from labProtocol: LabProtocol, targetVolume: Double) {
+        let factor = targetVolume / labProtocol.baseVolume
+        let recipeSummary = labProtocol.ingredients
+            .prefix(3)
+            .map { "\($0.name) \($0.scaled(by: factor))" }
+            .joined(separator: " / ")
+        let duration = estimatedMinutes(from: labProtocol.expectedDuration)
+        let run = LabRun(
+            id: "import-\(labProtocol.id)-\(Int(Date().timeIntervalSince1970))",
+            title: labProtocol.name,
+            area: labProtocol.area,
+            timeLabel: "现在",
+            status: "刚导入",
+            protocolName: labProtocol.name,
+            scaledVolumeLabel: "\(formattedVolume(targetVolume)) \(labProtocol.volumeUnit) · x\(String(format: "%.2f", factor))",
+            steps: [
+                LabStep(
+                    id: "\(labProtocol.id)-review-\(Int(Date().timeIntervalSince1970))",
+                    title: "核对换算配方",
+                    detail: recipeSummary,
+                    durationMinutes: nil,
+                    isCarryOver: false
+                ),
+                LabStep(
+                    id: "\(labProtocol.id)-execute-\(Int(Date().timeIntervalSince1970))",
+                    title: "执行 Protocol",
+                    detail: "按缩放后的用量完成 \(labProtocol.name)",
+                    durationMinutes: duration,
+                    isCarryOver: false
+                ),
+                LabStep(
+                    id: "\(labProtocol.id)-record-\(Int(Date().timeIntervalSince1970))",
+                    title: "记录结果",
+                    detail: "完成后生成结果卡片或补充实验备注",
+                    durationMinutes: nil,
+                    isCarryOver: false
+                )
+            ]
+        )
+        importedRuns.insert(run, at: 0)
+    }
+
+    private func loadImportedRuns() {
+        guard let data = UserDefaults.standard.data(forKey: "importedLabRuns"),
+              let runs = try? JSONDecoder().decode([LabRun].self, from: data) else {
+            return
+        }
+        importedRuns = runs
+    }
+
+    private func saveImportedRuns(_ runs: [LabRun]) {
+        guard let data = try? JSONEncoder().encode(runs) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: "importedLabRuns")
+    }
+
+    private func estimatedMinutes(from text: String) -> Int? {
+        let digits = text.prefix { $0.isNumber }
+        guard let minutes = Int(digits), minutes > 0 else {
+            return nil
+        }
+        return minutes
+    }
+
+    private func formattedVolume(_ volume: Double) -> String {
+        volume.rounded() == volume ? String(format: "%.0f", volume) : String(format: "%.1f", volume)
     }
 }
 
 private struct TodayView: View {
+    let importedRuns: [LabRun]
     @AppStorage("completedStepIDs") private var completedStepIDsData = ""
     @State private var activeTimers: [ActiveLabTimer] = []
     @State private var selectedDataCardRun: LabRun?
@@ -33,17 +111,34 @@ private struct TodayView: View {
         nonmutating set { completedStepIDsData = newValue.sorted().joined(separator: ",") }
     }
 
+    private var todayRuns: [LabRun] {
+        importedRuns + SampleData.runs
+    }
+
+    private var timerPointCount: Int {
+        todayRuns.flatMap(\.steps).filter { $0.durationMinutes != nil }.count
+    }
+
+    private var carryOverCount: Int {
+        todayRuns.flatMap(\.steps).filter(\.isCarryOver).count
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    HeaderPanel(activeTimers: activeTimers)
+                    HeaderPanel(
+                        runCount: todayRuns.count,
+                        timerPointCount: timerPointCount,
+                        carryOverCount: carryOverCount,
+                        activeTimers: activeTimers
+                    )
 
                     if !activeTimers.isEmpty {
                         TimerDock(activeTimers: activeTimers, stopTimer: stopTimer)
                     }
 
-                    ForEach(SampleData.runs) { run in
+                    ForEach(todayRuns) { run in
                         RunCard(
                             run: run,
                             completedStepIDs: completedStepIDs,
@@ -138,6 +233,9 @@ private struct TodayView: View {
 }
 
 private struct HeaderPanel: View {
+    let runCount: Int
+    let timerPointCount: Int
+    let carryOverCount: Int
     let activeTimers: [ActiveLabTimer]
 
     private var urgentTimerLabel: String {
@@ -153,7 +251,7 @@ private struct HeaderPanel: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("今天")
                         .font(.title.bold())
-                    Text("3 个实验 · 5 个计时点 · 1 个顺延占位")
+                    Text("\(runCount) 个实验 · \(timerPointCount) 个计时点 · \(carryOverCount) 个顺延占位")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -527,6 +625,8 @@ private struct StepRow: View {
 
 private struct ProtocolsView: View {
     @State private var targetVolume = 50.0
+    @State private var importedProtocolName: String?
+    let importRun: (LabProtocol, Double) -> Void
 
     var body: some View {
         NavigationStack {
@@ -548,7 +648,15 @@ private struct ProtocolsView: View {
                 }
 
                 ForEach(SampleData.protocols) { labProtocol in
-                    ProtocolCard(labProtocol: labProtocol, targetVolume: targetVolume)
+                    ProtocolCard(
+                        labProtocol: labProtocol,
+                        targetVolume: targetVolume,
+                        isRecentlyImported: importedProtocolName == labProtocol.name,
+                        importRun: {
+                            importRun(labProtocol, targetVolume)
+                            importedProtocolName = labProtocol.name
+                        }
+                    )
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
@@ -562,6 +670,8 @@ private struct ProtocolsView: View {
 private struct ProtocolCard: View {
     let labProtocol: LabProtocol
     let targetVolume: Double
+    let isRecentlyImported: Bool
+    let importRun: () -> Void
 
     private var scaleFactor: Double {
         targetVolume / labProtocol.baseVolume
@@ -597,13 +707,21 @@ private struct ProtocolCard: View {
                 .font(.subheadline)
             }
 
-            Button {
-            } label: {
-                Label("导入今日安排", systemImage: "calendar.badge.plus")
-                    .frame(maxWidth: .infinity)
+            if isRecentlyImported {
+                Button(action: importRun) {
+                    Label("已导入今日", systemImage: "checkmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            } else {
+                Button(action: importRun) {
+                    Label("导入今日安排", systemImage: "calendar.badge.plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
         }
         .padding(16)
         .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))

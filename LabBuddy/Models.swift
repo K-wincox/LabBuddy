@@ -1,6 +1,6 @@
 import Foundation
 
-enum WorkflowArea: String, CaseIterable, Identifiable {
+enum WorkflowArea: String, CaseIterable, Identifiable, Codable {
     case cell = "细胞实验"
     case cloning = "分子克隆"
     case blot = "WB/跑胶"
@@ -8,7 +8,7 @@ enum WorkflowArea: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-struct LabStep: Identifiable, Hashable {
+struct LabStep: Identifiable, Hashable, Codable {
     let id: String
     let title: String
     let detail: String
@@ -16,7 +16,7 @@ struct LabStep: Identifiable, Hashable {
     let isCarryOver: Bool
 }
 
-struct LabRun: Identifiable, Hashable {
+struct LabRun: Identifiable, Hashable, Codable {
     let id: String
     let title: String
     let area: WorkflowArea

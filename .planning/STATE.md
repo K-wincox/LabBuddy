@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 Phase: 1 of 8 (iOS Local Foundation)
 Plan: 3 of 3 in current phase
 Status: Phase 1 implementation complete; awaiting Xcode runtime verification
-Last activity: 2026-05-28 — Added Bench Mode focused execution view and first-run walkthrough.
+Last activity: 2026-05-28 — Connected Protocol scaling to local Today-run import for the first closed-loop experience.
 
 Progress: [█░░░░░░░░░] 11%
 
@@ -56,6 +56,7 @@ Recent decisions affecting current work:
 
 - Install full Xcode and run `xcodebuild` or launch the simulator for runtime verification.
 - After runtime verification, mark Phase 1 complete and move to Phase 2 Protocol Library.
+- Replace the current `UserDefaults` prototype persistence with a structured local store when Phase 2/3 data editing begins.
 
 ### Blockers/Concerns
 
@@ -73,5 +74,5 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-05-28
-Stopped at: Phase 1 implementation complete in code; next step is Xcode runtime verification.
+Stopped at: Phase 1 implementation complete in code with Protocol-to-Today import; next step is Xcode runtime verification.
 Resume file: None

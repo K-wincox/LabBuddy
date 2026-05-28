@@ -17,7 +17,7 @@ LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first u
 - Step completion state persists locally with `@AppStorage`.
 - App-local labeled timers can be started from experiment cards and persist between launches.
 - Bench Mode opens a focused, large-control execution view for one active experiment.
-- Protocol tab previews proportional recipe scaling.
+- Protocol tab previews proportional recipe scaling and imports scaled runs into Today.
 - Tools tab shows common buffer/calculation examples.
 - Share buttons open a first Data Card preview with run metadata and LabBuddy branding.
 
@@ -27,8 +27,9 @@ LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first u
 2. Tap `实验台` on any run to enter the focused bench-side view.
 3. Mark steps complete with the large check controls.
 4. Start a timer from the bench view or experiment card.
-5. Return to Today to see the running timer dock and urgent countdown.
-6. Tap the share button on a run to preview the first Data Card.
+5. Open the Protocol tab, adjust the target volume, and tap `导入今日安排`.
+6. Return to Today to see the newly imported scaled run.
+7. Tap the share button on a run to preview the first Data Card.
 
 ## Verification status
 

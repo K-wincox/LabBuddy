@@ -23,6 +23,12 @@
 - Bench Mode uses larger typography, larger tap targets, current-step emphasis, and timer visibility.
 - Added a README first walkthrough so the first local Xcode run has an obvious experience path.
 
+## 2026-05-28 protocol-import follow-up
+
+- Lifted imported run state to the app root.
+- Protocol cards now import a scaled local run into Today.
+- Imported runs persist in `UserDefaults` and are included in Today counts, timers, Bench Mode, and Data Card preview.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
