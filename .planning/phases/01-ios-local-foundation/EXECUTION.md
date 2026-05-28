@@ -86,6 +86,11 @@
 - The launcher gives Xcode setup guidance when only Command Line Tools are selected.
 - Packaging now includes the launcher.
 
+## 2026-05-28 package-checksum follow-up
+
+- Packaging now emits `dist/LabBuddy-iOS-prototype-latest.zip.sha256`.
+- Verified the commit-specific zip and latest zip are byte-identical and pass SHA-256 checks.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
@@ -95,4 +100,5 @@
 - `./scripts/package-ios-prototype.sh` creates `dist/LabBuddy-iOS-prototype-<commit>.zip`.
 - `dist/LabBuddy-iOS-prototype-latest.zip` matches the commit-specific zip.
 - `Open-LabBuddy.command` exits with the expected Xcode setup prompt in the current environment.
+- `shasum -a 256 -c dist/LabBuddy-iOS-prototype-latest.zip.sha256` passes after packaging.
 - Full `xcodebuild` verification is blocked until Xcode is installed. Current active developer directory only provides Command Line Tools.

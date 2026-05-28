@@ -10,11 +10,13 @@ PACKAGE_NAME="LabBuddy-iOS-prototype-${VERSION}.zip"
 PACKAGE_PATH="${PACKAGE_DIR}/${PACKAGE_NAME}"
 LATEST_NAME="LabBuddy-iOS-prototype-latest.zip"
 LATEST_PATH="${PACKAGE_DIR}/${LATEST_NAME}"
+CHECKSUM_PATH="${LATEST_PATH}.sha256"
 
 echo "== LabBuddy iOS prototype package =="
 mkdir -p "$PACKAGE_DIR"
 rm -f "$PACKAGE_PATH"
 rm -f "$LATEST_PATH"
+rm -f "$CHECKSUM_PATH"
 
 echo "Running static preflight..."
 set +e
@@ -40,8 +42,11 @@ printf '%s\n' 'scripts/package-ios-prototype.sh'
 printf '%s\n' 'Open-LabBuddy.command'
 } | sort -u | zip -q "$PACKAGE_PATH" -@
 cp "$PACKAGE_PATH" "$LATEST_PATH"
+shasum -a 256 "$PACKAGE_PATH" "$LATEST_PATH" > "$CHECKSUM_PATH"
 
 echo "Package created: ${PACKAGE_PATH}"
 echo "Latest alias: ${LATEST_PATH}"
+echo "Checksums:"
+cat "$CHECKSUM_PATH" | sed 's/^/  /'
 echo "Contents:"
 zipinfo -1 "$PACKAGE_PATH" | sed 's/^/  /'

@@ -35,7 +35,7 @@ Create a portable local zip with the Xcode project, source, docs, and scripts:
 ./scripts/package-ios-prototype.sh
 ```
 
-The package is written to `dist/LabBuddy-iOS-prototype-<commit>.zip`, with a convenience copy at `dist/LabBuddy-iOS-prototype-latest.zip`.
+The package is written to `dist/LabBuddy-iOS-prototype-<commit>.zip`, with a convenience copy at `dist/LabBuddy-iOS-prototype-latest.zip` and SHA-256 checksums in `dist/LabBuddy-iOS-prototype-latest.zip.sha256`.
 
 ## Current prototype
 
