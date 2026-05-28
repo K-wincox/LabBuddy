@@ -75,6 +75,11 @@
 - Added `.gitignore` entries for `dist/`, `DerivedData/`, and user-specific Xcode state.
 - Verified the package contains the Xcode project, Swift source, assets, README, acceptance doc, and helper scripts.
 
+## 2026-05-28 package-alias follow-up
+
+- Packaging now also creates `dist/LabBuddy-iOS-prototype-latest.zip` as a stable convenience copy.
+- Verified the commit-specific package and latest package are byte-identical.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
@@ -82,4 +87,5 @@
 - Xcode project, scheme, and asset JSON files validate structurally.
 - `./scripts/check-ios-local.sh` passes required-file, Swift source, project, scheme, asset JSON, and AppIcon dimension checks, then exits at the expected Xcode-not-installed gate in this environment.
 - `./scripts/package-ios-prototype.sh` creates `dist/LabBuddy-iOS-prototype-<commit>.zip`.
+- `dist/LabBuddy-iOS-prototype-latest.zip` matches the commit-specific zip.
 - Full `xcodebuild` verification is blocked until Xcode is installed. Current active developer directory only provides Command Line Tools.

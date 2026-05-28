@@ -33,6 +33,7 @@ Run:
 Expected result:
 
 - `dist/LabBuddy-iOS-prototype-<commit>.zip` is created.
+- `dist/LabBuddy-iOS-prototype-latest.zip` is created as a stable convenience copy.
 - The zip includes `LabBuddy.xcodeproj`, Swift source, assets, README, acceptance docs, and scripts.
 
 ## First Experience Checklist
