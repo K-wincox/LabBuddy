@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 Phase: 1 of 8 (iOS Local Foundation)
 Plan: 3 of 3 in current phase
 Status: Phase 1 implementation complete; awaiting Xcode runtime verification
-Last activity: 2026-05-28 — Added local demo cleanup controls for imported runs and persisted prototype state.
+Last activity: 2026-05-28 — Added local iOS preflight script for Xcode setup and simulator-build verification.
 
 Progress: [█░░░░░░░░░] 11%
 
@@ -55,6 +55,7 @@ Recent decisions affecting current work:
 ### Pending Todos
 
 - Install full Xcode and run `xcodebuild` or launch the simulator for runtime verification.
+- After installing Xcode, run `./scripts/check-ios-local.sh`.
 - After runtime verification, mark Phase 1 complete and move to Phase 2 Protocol Library.
 - Replace the current `UserDefaults` prototype persistence with a structured local store when Phase 2/3 data editing begins.
 
@@ -74,5 +75,5 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-05-28
-Stopped at: Phase 1 implementation complete in code with reusable local demo controls; next step is Xcode runtime verification.
+Stopped at: Phase 1 implementation complete in code with local preflight script; next step is install full Xcode and run `./scripts/check-ios-local.sh`.
 Resume file: None

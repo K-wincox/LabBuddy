@@ -53,9 +53,16 @@
 - Inventory now exposes a reset action to clear imported runs, step completion, active timers, and inventory edits.
 - The reset path keeps repeated local Xcode demos from accumulating stale prototype state.
 
+## 2026-05-28 local-preflight follow-up
+
+- Added `scripts/check-ios-local.sh` for local source, project, scheme, asset, and Xcode environment checks.
+- The script builds the app for iOS Simulator when full Xcode is available.
+- In the current Command Line Tools-only environment, the script exits with an explicit Xcode setup instruction after passing static checks.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
 - `swiftc -typecheck LabBuddy/LabBuddyApp.swift LabBuddy/Models.swift LabBuddy/SampleData.swift LabBuddy/ContentView.swift` passes.
 - Xcode project, scheme, and asset JSON files validate structurally.
+- `./scripts/check-ios-local.sh` passes static checks and exits at the expected Xcode-not-installed gate in this environment.
 - Full `xcodebuild` verification is blocked until Xcode is installed. Current active developer directory only provides Command Line Tools.

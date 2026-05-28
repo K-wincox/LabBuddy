@@ -9,6 +9,22 @@ LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first u
 3. Select an iPhone simulator.
 4. Run the `LabBuddy` scheme.
 
+## Local preflight
+
+Run the local checker before opening Xcode:
+
+```sh
+./scripts/check-ios-local.sh
+```
+
+If Xcode is installed but the checker still points at Command Line Tools, run:
+
+```sh
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+```
+
+Then run the checker again. With full Xcode available, the script validates the project and builds the app for iOS Simulator.
+
 ## Current prototype
 
 - Native SwiftUI app, iOS 17.0 target.
@@ -41,4 +57,4 @@ LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first u
 
 ## Verification status
 
-The repository currently has Swift source type-checking and project-file validation. Full `xcodebuild` verification requires full Xcode; this machine currently only has Command Line Tools.
+The repository currently has Swift source type-checking and project-file validation through `./scripts/check-ios-local.sh`. Full `xcodebuild` verification requires full Xcode; this machine currently only has Command Line Tools.
