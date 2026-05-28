@@ -17,6 +17,12 @@
 - Added a running-timer dock and urgent timer summary on the Today header.
 - Added a first Data Card preview sheet with run metadata and subtle `Powered by LabBuddy` branding.
 
+## 2026-05-28 bench-mode follow-up
+
+- Added a focused Bench Mode sheet for one active experiment.
+- Bench Mode uses larger typography, larger tap targets, current-step emphasis, and timer visibility.
+- Added a README first walkthrough so the first local Xcode run has an obvious experience path.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
