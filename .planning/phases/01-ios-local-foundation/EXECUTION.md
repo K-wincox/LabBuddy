@@ -64,6 +64,11 @@
 - Added `docs/PHASE1_ACCEPTANCE.md` to make local Xcode acceptance explicit.
 - Expanded preflight checks for required files, shared scheme identity, and AppIcon dimensions.
 
+## 2026-05-28 clipboard follow-up
+
+- Added a platform-aware clipboard helper for iOS and macOS type-checking.
+- Calculator results and Data Card report summaries now write to the clipboard instead of only changing local button state.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.

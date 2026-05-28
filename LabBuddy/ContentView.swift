@@ -1,4 +1,9 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct ContentView: View {
     @State private var importedRuns: [LabRun] = []
@@ -901,9 +906,10 @@ private struct ToolsView: View {
                             .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
 
                         Button {
+                            Clipboard.copy(resultText)
                             copiedResult = resultText
                         } label: {
-                            Label(copiedResult == resultText ? "已准备复制" : "生成可复制结果", systemImage: copiedResult == resultText ? "checkmark.circle.fill" : "doc.on.doc")
+                            Label(copiedResult == resultText ? "已复制结果" : "复制计算结果", systemImage: copiedResult == resultText ? "checkmark.circle.fill" : "doc.on.doc")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
@@ -1189,9 +1195,10 @@ private struct DataCardPreview: View {
                 .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
 
                 Button {
+                    Clipboard.copy(reportText)
                     reportCopied = true
                 } label: {
-                    Label(reportCopied ? "摘要已准备复制" : "生成汇报摘要", systemImage: reportCopied ? "checkmark.circle.fill" : "doc.on.doc")
+                    Label(reportCopied ? "已复制汇报摘要" : "复制汇报摘要", systemImage: reportCopied ? "checkmark.circle.fill" : "doc.on.doc")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -1248,6 +1255,17 @@ private struct CalculatorExampleCard: View {
         }
         .padding(16)
         .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private enum Clipboard {
+    static func copy(_ text: String) {
+        #if os(iOS)
+        UIPasteboard.general.string = text
+        #elseif os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #endif
     }
 }
 

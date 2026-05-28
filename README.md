@@ -37,11 +37,11 @@ Detailed local acceptance steps live in [docs/PHASE1_ACCEPTANCE.md](docs/PHASE1_
 - Bench Mode opens a focused, large-control execution view for one active experiment.
 - Protocol tab previews proportional recipe scaling and imports scaled runs into Today.
 - Imported runs can be removed from Today so repeated demos stay tidy.
-- Tools tab has interactive mass, dilution, and percentage calculators plus quick examples.
+- Tools tab has interactive mass, dilution, and percentage calculators plus clipboard copy.
 - Inventory tab tracks local reagent/material quantities with low-stock warnings and quick adjustments.
 - Inventory includes a local demo reset action for repeated Xcode testing.
 - Bench completion can generate a first Data Card preview with run metadata and LabBuddy branding.
-- Data Cards include a local mentor-report summary draft.
+- Data Cards include a local mentor-report summary draft with clipboard copy.
 
 ## First walkthrough
 
@@ -51,10 +51,10 @@ Detailed local acceptance steps live in [docs/PHASE1_ACCEPTANCE.md](docs/PHASE1_
 4. Start a timer from the bench view or experiment card.
 5. Open the Protocol tab, adjust the target volume, and tap `导入今日安排`.
 6. Return to Today to see the newly imported scaled run.
-7. Open Tools and calculate a mass, dilution, or percentage recipe.
+7. Open Tools, calculate a mass/dilution/percentage recipe, and copy the result.
 8. Open Inventory and try quick deduct/restock on a low-stock item.
 9. Finish a run in Bench Mode or tap the share button to preview the first Data Card.
-10. Generate the local report summary draft from the Data Card.
+10. Copy the local report summary draft from the Data Card.
 11. Use Inventory's reset action if you want to replay the demo from a clean local state.
 
 ## Verification status

@@ -31,10 +31,10 @@ Expected result after Xcode is installed:
 - A labeled timer can be started from a run.
 - Protocol target volume can be changed and imported into Today.
 - Imported runs can be removed.
-- Tools calculates mass, dilution, and percentage concentration results.
+- Tools calculates mass, dilution, and percentage concentration results and copies the result.
 - Inventory shows seeded reagents, low-stock warning, deduct/restock controls, and reset.
 - Completing a run opens a Data Card.
-- Data Card shows run metadata, `Powered by LabBuddy`, and a local report-summary draft.
+- Data Card shows run metadata, `Powered by LabBuddy`, and a local report-summary draft that can be copied.
 
 ## Current Limitation
 
