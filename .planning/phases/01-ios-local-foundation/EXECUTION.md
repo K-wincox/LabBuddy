@@ -80,6 +80,12 @@
 - Packaging now also creates `dist/LabBuddy-iOS-prototype-latest.zip` as a stable convenience copy.
 - Verified the commit-specific package and latest package are byte-identical.
 
+## 2026-05-28 open-launcher follow-up
+
+- Added `Open-LabBuddy.command` as a double-click launcher for the Xcode project.
+- The launcher gives Xcode setup guidance when only Command Line Tools are selected.
+- Packaging now includes the launcher.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
@@ -88,4 +94,5 @@
 - `./scripts/check-ios-local.sh` passes required-file, Swift source, project, scheme, asset JSON, and AppIcon dimension checks, then exits at the expected Xcode-not-installed gate in this environment.
 - `./scripts/package-ios-prototype.sh` creates `dist/LabBuddy-iOS-prototype-<commit>.zip`.
 - `dist/LabBuddy-iOS-prototype-latest.zip` matches the commit-specific zip.
+- `Open-LabBuddy.command` exits with the expected Xcode setup prompt in the current environment.
 - Full `xcodebuild` verification is blocked until Xcode is installed. Current active developer directory only provides Command Line Tools.

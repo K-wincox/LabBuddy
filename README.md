@@ -5,7 +5,7 @@ LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first u
 ## Open locally
 
 1. Install Xcode from the Mac App Store.
-2. Open `LabBuddy.xcodeproj`.
+2. Double-click `Open-LabBuddy.command`, or open `LabBuddy.xcodeproj` directly.
 3. Select an iPhone simulator.
 4. Run the `LabBuddy` scheme.
 

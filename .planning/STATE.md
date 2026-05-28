@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 Phase: 1 of 8 (iOS Local Foundation)
 Plan: 3 of 3 in current phase
 Status: Phase 1 implementation complete; awaiting Xcode runtime verification
-Last activity: 2026-05-28 — Added stable latest zip output for the portable Xcode prototype package.
+Last activity: 2026-05-28 — Added double-click Xcode launcher to the local prototype package.
 
 Progress: [█░░░░░░░░░] 11%
 

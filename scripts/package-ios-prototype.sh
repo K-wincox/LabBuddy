@@ -31,11 +31,13 @@ echo "Creating ${PACKAGE_PATH}..."
 git ls-files \
   'LabBuddy/**' \
   'LabBuddy.xcodeproj/**' \
+  'Open-LabBuddy.command' \
   'README.md' \
   'docs/**' \
   'scripts/check-ios-local.sh' \
   'scripts/package-ios-prototype.sh'
 printf '%s\n' 'scripts/package-ios-prototype.sh'
+printf '%s\n' 'Open-LabBuddy.command'
 } | sort -u | zip -q "$PACKAGE_PATH" -@
 cp "$PACKAGE_PATH" "$LATEST_PATH"
 
