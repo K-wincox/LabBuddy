@@ -96,6 +96,12 @@
 - Packaging now includes `PACKAGE_MANIFEST.txt` at the zip root.
 - The manifest records package version, open command, verification command, package names, and the Xcode requirement.
 
+## 2026-05-28 makefile follow-up
+
+- Added a root `Makefile` with `preflight`, `package`, `open`, `clean-demo-package`, and `help` commands.
+- Packaging now includes the `Makefile`.
+- The package manifest now mentions `make preflight`.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
@@ -107,4 +113,5 @@
 - `Open-LabBuddy.command` exits with the expected Xcode setup prompt in the current environment.
 - `shasum -a 256 -c dist/LabBuddy-iOS-prototype-latest.zip.sha256` passes after packaging.
 - `PACKAGE_MANIFEST.txt` is present at the root of `dist/LabBuddy-iOS-prototype-latest.zip`.
+- `make package` creates the latest package and includes `Makefile`, `Open-LabBuddy.command`, and `PACKAGE_MANIFEST.txt`.
 - Full `xcodebuild` verification is blocked until Xcode is installed. Current active developer directory only provides Command Line Tools.

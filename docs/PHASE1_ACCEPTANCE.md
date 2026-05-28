@@ -10,11 +10,18 @@ Run:
 ./scripts/check-ios-local.sh
 ```
 
+or:
+
+```sh
+make preflight
+```
+
 Expected result before Xcode is installed:
 
 - Swift source type-check passes.
 - Xcode project, scheme, assets, and AppIcon checks pass.
 - Script stops with the Xcode setup instruction.
+- `make preflight` exits with status 2 in this state; that is expected before full Xcode is selected.
 
 Expected result after Xcode is installed:
 
@@ -30,12 +37,19 @@ Run:
 ./scripts/package-ios-prototype.sh
 ```
 
+or:
+
+```sh
+make package
+```
+
 Expected result:
 
 - `dist/LabBuddy-iOS-prototype-<commit>.zip` is created.
 - `dist/LabBuddy-iOS-prototype-latest.zip` is created as a stable convenience copy.
 - `dist/LabBuddy-iOS-prototype-latest.zip.sha256` records SHA-256 checksums.
 - The zip includes `LabBuddy.xcodeproj`, Swift source, assets, README, acceptance docs, and scripts.
+- The zip includes `Makefile` shortcuts for preflight, package, open, and clean-demo-package.
 - The zip includes `Open-LabBuddy.command` for double-click opening after Xcode is installed.
 - The zip includes `PACKAGE_MANIFEST.txt` with package version and verification commands.
 

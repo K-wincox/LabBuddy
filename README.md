@@ -17,6 +17,12 @@ Run the local checker before opening Xcode:
 ./scripts/check-ios-local.sh
 ```
 
+or:
+
+```sh
+make preflight
+```
+
 If Xcode is installed but the checker still points at Command Line Tools, run:
 
 ```sh
@@ -27,12 +33,27 @@ Then run the checker again. With full Xcode available, the script validates the 
 
 Detailed local acceptance steps live in [docs/PHASE1_ACCEPTANCE.md](docs/PHASE1_ACCEPTANCE.md).
 
+Common local commands are also available through `make`:
+
+```sh
+make help
+make preflight
+make package
+make open
+```
+
 ## Package the prototype
 
 Create a portable local zip with the Xcode project, source, docs, and scripts:
 
 ```sh
 ./scripts/package-ios-prototype.sh
+```
+
+or:
+
+```sh
+make package
 ```
 
 The package is written to `dist/LabBuddy-iOS-prototype-<commit>.zip`, with a convenience copy at `dist/LabBuddy-iOS-prototype-latest.zip` and SHA-256 checksums in `dist/LabBuddy-iOS-prototype-latest.zip.sha256`.
