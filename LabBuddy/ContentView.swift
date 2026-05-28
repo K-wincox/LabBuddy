@@ -729,10 +729,105 @@ private struct ProtocolCard: View {
 }
 
 private struct ToolsView: View {
+    @State private var selectedCalculator: CalculatorMode = .mass
+    @State private var molecularWeight = 121.14
+    @State private var targetMolarity = 0.5
+    @State private var massVolumeML = 100.0
+    @State private var stockConcentration = 1.0
+    @State private var finalConcentration = 0.05
+    @State private var dilutionVolumeML = 100.0
+    @State private var percentValue = 5.0
+    @State private var percentVolumeML = 20.0
+    @State private var copiedResult: String?
+
+    private var massResult: Double {
+        molecularWeight * targetMolarity * (massVolumeML / 1000.0)
+    }
+
+    private var stockVolumeML: Double {
+        guard stockConcentration > 0 else {
+            return 0
+        }
+        return finalConcentration * dilutionVolumeML / stockConcentration
+    }
+
+    private var solventVolumeML: Double {
+        max(0, dilutionVolumeML - stockVolumeML)
+    }
+
+    private var percentMassG: Double {
+        percentValue / 100.0 * percentVolumeML
+    }
+
+    private var resultText: String {
+        switch selectedCalculator {
+        case .mass:
+            return "称量 \(formatDecimal(massResult)) g"
+        case .dilution:
+            return "取母液 \(formatDecimal(stockVolumeML)) ml + 溶剂 \(formatDecimal(solventVolumeML)) ml"
+        case .percent:
+            return "称量/量取 \(formatDecimal(percentMassG)) g 或 ml，定容至 \(formatDecimal(percentVolumeML)) ml"
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Picker("计算模式", selection: $selectedCalculator) {
+                        ForEach(CalculatorMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(selectedCalculator.title)
+                                    .font(.headline)
+                                Text(selectedCalculator.subtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: selectedCalculator.icon)
+                                .font(.title2)
+                                .foregroundStyle(.teal)
+                        }
+
+                        switch selectedCalculator {
+                        case .mass:
+                            CalculatorNumberField(title: "分子量", value: $molecularWeight, unit: "g/mol")
+                            CalculatorNumberField(title: "目标浓度", value: $targetMolarity, unit: "M")
+                            CalculatorNumberField(title: "总体积", value: $massVolumeML, unit: "ml")
+                        case .dilution:
+                            CalculatorNumberField(title: "母液浓度 C1", value: $stockConcentration, unit: "M")
+                            CalculatorNumberField(title: "目标浓度 C2", value: $finalConcentration, unit: "M")
+                            CalculatorNumberField(title: "总体积 V2", value: $dilutionVolumeML, unit: "ml")
+                        case .percent:
+                            CalculatorNumberField(title: "百分比浓度", value: $percentValue, unit: "%")
+                            CalculatorNumberField(title: "总体积", value: $percentVolumeML, unit: "ml")
+                        }
+
+                        Text(resultText)
+                            .font(.title3.monospacedDigit().weight(.bold))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+
+                        Button {
+                            copiedResult = resultText
+                        } label: {
+                            Label(copiedResult == resultText ? "已准备复制" : "生成可复制结果", systemImage: copiedResult == resultText ? "checkmark.circle.fill" : "doc.on.doc")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                    }
+                    .padding(16)
+                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
                     ForEach(SampleData.calculatorExamples) { example in
                         CalculatorExampleCard(example: example)
                     }
@@ -741,6 +836,70 @@ private struct ToolsView: View {
             }
             .background(Color.labBackground)
             .navigationTitle("计算工具")
+        }
+    }
+}
+
+private enum CalculatorMode: String, CaseIterable, Identifiable {
+    case mass = "质量"
+    case dilution = "稀释"
+    case percent = "%"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .mass:
+            return "质量浓度"
+        case .dilution:
+            return "液体稀释"
+        case .percent:
+            return "百分比浓度"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .mass:
+            return "MW × M × L"
+        case .dilution:
+            return "C1V1 = C2V2"
+        case .percent:
+            return "w/v 或 v/v"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .mass:
+            return "scalemass"
+        case .dilution:
+            return "drop.triangle"
+        case .percent:
+            return "percent"
+        }
+    }
+}
+
+private struct CalculatorNumberField: View {
+    let title: String
+    @Binding var value: Double
+    let unit: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            TextField("0", value: $value, format: .number)
+                .multilineTextAlignment(.trailing)
+                .font(.body.monospacedDigit())
+                .frame(width: 92)
+                .textFieldStyle(.roundedBorder)
+            Text(unit)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 48, alignment: .leading)
         }
     }
 }
@@ -866,6 +1025,16 @@ private func formatDuration(_ seconds: Int) -> String {
     let minutes = seconds / 60
     let seconds = seconds % 60
     return String(format: "%02d:%02d", minutes, seconds)
+}
+
+private func formatDecimal(_ value: Double) -> String {
+    if value >= 100 {
+        return String(format: "%.0f", value)
+    }
+    if value >= 10 {
+        return String(format: "%.1f", value)
+    }
+    return String(format: "%.2f", value)
 }
 
 private extension Color {

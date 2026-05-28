@@ -29,6 +29,12 @@
 - Protocol cards now import a scaled local run into Today.
 - Imported runs persist in `UserDefaults` and are included in Today counts, timers, Bench Mode, and Data Card preview.
 
+## 2026-05-28 calculator follow-up
+
+- Replaced the static Tools-only calculator examples with interactive calculators.
+- Added mass concentration, liquid dilution, and percentage concentration modes.
+- Calculator results update locally and expose a first copy-ready interaction state.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
