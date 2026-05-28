@@ -69,10 +69,17 @@
 - Added a platform-aware clipboard helper for iOS and macOS type-checking.
 - Calculator results and Data Card report summaries now write to the clipboard instead of only changing local button state.
 
+## 2026-05-28 package follow-up
+
+- Added `scripts/package-ios-prototype.sh` to create a portable local Xcode prototype zip.
+- Added `.gitignore` entries for `dist/`, `DerivedData/`, and user-specific Xcode state.
+- Verified the package contains the Xcode project, Swift source, assets, README, acceptance doc, and helper scripts.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.
 - `swiftc -typecheck LabBuddy/LabBuddyApp.swift LabBuddy/Models.swift LabBuddy/SampleData.swift LabBuddy/ContentView.swift` passes.
 - Xcode project, scheme, and asset JSON files validate structurally.
 - `./scripts/check-ios-local.sh` passes required-file, Swift source, project, scheme, asset JSON, and AppIcon dimension checks, then exits at the expected Xcode-not-installed gate in this environment.
+- `./scripts/package-ios-prototype.sh` creates `dist/LabBuddy-iOS-prototype-<commit>.zip`.
 - Full `xcodebuild` verification is blocked until Xcode is installed. Current active developer directory only provides Command Line Tools.

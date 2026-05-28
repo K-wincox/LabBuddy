@@ -22,6 +22,19 @@ Expected result after Xcode is installed:
 - `LabBuddy.xcodeproj` opens in Xcode.
 - The `LabBuddy` scheme can launch on an iPhone simulator.
 
+## Local Package
+
+Run:
+
+```sh
+./scripts/package-ios-prototype.sh
+```
+
+Expected result:
+
+- `dist/LabBuddy-iOS-prototype-<commit>.zip` is created.
+- The zip includes `LabBuddy.xcodeproj`, Swift source, assets, README, acceptance docs, and scripts.
+
 ## First Experience Checklist
 
 - App launches without sign-in.

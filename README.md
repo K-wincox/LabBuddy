@@ -27,6 +27,16 @@ Then run the checker again. With full Xcode available, the script validates the 
 
 Detailed local acceptance steps live in [docs/PHASE1_ACCEPTANCE.md](docs/PHASE1_ACCEPTANCE.md).
 
+## Package the prototype
+
+Create a portable local zip with the Xcode project, source, docs, and scripts:
+
+```sh
+./scripts/package-ios-prototype.sh
+```
+
+The package is written to `dist/LabBuddy-iOS-prototype-<commit>.zip`.
+
 ## Current prototype
 
 - Native SwiftUI app, iOS 17.0 target.
