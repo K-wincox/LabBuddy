@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var importedRuns: [LabRun] = []
+    @State private var inventoryItems: [InventoryItem] = SampleData.inventory
 
     var body: some View {
         TabView {
@@ -21,11 +22,22 @@ struct ContentView: View {
                 .tabItem {
                     Label("工具", systemImage: "function")
                 }
+
+            InventoryView(items: $inventoryItems)
+                .tabItem {
+                    Label("库存", systemImage: "shippingbox")
+                }
         }
         .tint(.teal)
-        .onAppear(perform: loadImportedRuns)
+        .onAppear {
+            loadImportedRuns()
+            loadInventoryItems()
+        }
         .onChange(of: importedRuns) {
             saveImportedRuns(importedRuns)
+        }
+        .onChange(of: inventoryItems) {
+            saveInventoryItems(inventoryItems)
         }
     }
 
@@ -84,6 +96,21 @@ struct ContentView: View {
             return
         }
         UserDefaults.standard.set(data, forKey: "importedLabRuns")
+    }
+
+    private func loadInventoryItems() {
+        guard let data = UserDefaults.standard.data(forKey: "inventoryItems"),
+              let items = try? JSONDecoder().decode([InventoryItem].self, from: data) else {
+            return
+        }
+        inventoryItems = items
+    }
+
+    private func saveInventoryItems(_ items: [InventoryItem]) {
+        guard let data = try? JSONEncoder().encode(items) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: "inventoryItems")
     }
 
     private func estimatedMinutes(from text: String) -> Int? {
@@ -868,6 +895,116 @@ private struct ToolsView: View {
     }
 }
 
+private struct InventoryView: View {
+    @Binding var items: [InventoryItem]
+
+    private var lowStockCount: Int {
+        items.filter(\.isLowStock).count
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("个人库存")
+                                    .font(.title2.bold())
+                                Text("\(items.count) 项 · \(lowStockCount) 项低库存")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: lowStockCount > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(lowStockCount > 0 ? .orange : .teal)
+                        }
+                    }
+                    .padding(16)
+                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
+                    ForEach($items) { $item in
+                        InventoryItemCard(item: $item)
+                    }
+                }
+                .padding(18)
+            }
+            .background(Color.labBackground)
+            .navigationTitle("库存")
+        }
+    }
+}
+
+private struct InventoryItemCard: View {
+    @Binding var item: InventoryItem
+
+    private var progress: Double {
+        guard item.threshold > 0 else {
+            return 1
+        }
+        return min(1, item.quantity / (item.threshold * 3))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.name)
+                        .font(.headline)
+                    Text("\(item.category) · \(item.storage)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(item.isLowStock ? "低库存" : "充足")
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background((item.isLowStock ? Color.orange : Color.teal).opacity(0.14), in: Capsule())
+                    .foregroundStyle(item.isLowStock ? .orange : .teal)
+            }
+
+            HStack(alignment: .lastTextBaseline, spacing: 6) {
+                Text(formatDecimal(item.quantity))
+                    .font(.title2.monospacedDigit().bold())
+                Text(item.unit)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("阈值 \(formatDecimal(item.threshold)) \(item.unit)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            ProgressView(value: progress)
+                .tint(item.isLowStock ? .orange : .teal)
+
+            HStack(spacing: 10) {
+                Button {
+                    item.quantity = max(0, item.quantity - defaultDeduction(for: item.unit))
+                } label: {
+                    Label("扣减", systemImage: "minus.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
+                Button {
+                    item.quantity += defaultRestock(for: item.unit)
+                } label: {
+                    Label("补货", systemImage: "plus.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+        }
+        .padding(16)
+        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 private enum CalculatorMode: String, CaseIterable, Identifiable {
     case mass = "质量"
     case dilution = "稀释"
@@ -1080,6 +1217,28 @@ private func formatDecimal(_ value: Double) -> String {
         return String(format: "%.1f", value)
     }
     return String(format: "%.2f", value)
+}
+
+private func defaultDeduction(for unit: String) -> Double {
+    switch unit {
+    case "ul":
+        return 1
+    case "sheets":
+        return 1
+    default:
+        return 10
+    }
+}
+
+private func defaultRestock(for unit: String) -> Double {
+    switch unit {
+    case "ul":
+        return 5
+    case "sheets":
+        return 1
+    default:
+        return 50
+    }
 }
 
 private extension Color {

@@ -19,6 +19,7 @@ LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first u
 - Bench Mode opens a focused, large-control execution view for one active experiment.
 - Protocol tab previews proportional recipe scaling and imports scaled runs into Today.
 - Tools tab has interactive mass, dilution, and percentage calculators plus quick examples.
+- Inventory tab tracks local reagent/material quantities with low-stock warnings and quick adjustments.
 - Bench completion can generate a first Data Card preview with run metadata and LabBuddy branding.
 - Data Cards include a local mentor-report summary draft.
 
@@ -31,8 +32,9 @@ LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first u
 5. Open the Protocol tab, adjust the target volume, and tap `导入今日安排`.
 6. Return to Today to see the newly imported scaled run.
 7. Open Tools and calculate a mass, dilution, or percentage recipe.
-8. Finish a run in Bench Mode or tap the share button to preview the first Data Card.
-9. Generate the local report summary draft from the Data Card.
+8. Open Inventory and try quick deduct/restock on a low-stock item.
+9. Finish a run in Bench Mode or tap the share button to preview the first Data Card.
+10. Generate the local report summary draft from the Data Card.
 
 ## Verification status
 

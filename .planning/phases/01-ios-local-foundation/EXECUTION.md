@@ -41,6 +41,12 @@
 - Data Card preview now includes a local report-summary draft based on run metadata.
 - The report action now changes state locally instead of acting as a placeholder close button.
 
+## 2026-05-28 inventory follow-up
+
+- Added a local Inventory tab with seeded wet-lab reagents and consumables.
+- Inventory quantities persist in `UserDefaults`.
+- Low-stock items are visually marked and can be quickly deducted or restocked.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.

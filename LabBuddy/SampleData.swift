@@ -96,4 +96,12 @@ enum SampleData {
         CalculatorExample(id: "mass", title: "质量浓度", input: "MW 121.14, 0.5M, 100 ml", result: "称量 6.06 g"),
         CalculatorExample(id: "percent", title: "百分比浓度", input: "5% milk / TBST, 20 ml", result: "称量 1.00 g milk powder")
     ]
+
+    static let inventory: [InventoryItem] = [
+        InventoryItem(id: "dmem", name: "DMEM high glucose", category: "培养基", quantity: 420, unit: "ml", threshold: 100, storage: "4 C fridge"),
+        InventoryItem(id: "fbs", name: "FBS", category: "血清", quantity: 38, unit: "ml", threshold: 50, storage: "-20 C box A"),
+        InventoryItem(id: "trypsin", name: "0.25% Trypsin", category: "细胞实验", quantity: 72, unit: "ml", threshold: 20, storage: "4 C fridge"),
+        InventoryItem(id: "ligase", name: "T4 Ligase", category: "分子克隆", quantity: 6, unit: "ul", threshold: 5, storage: "-20 C enzyme rack"),
+        InventoryItem(id: "pvdf", name: "PVDF membrane", category: "WB/跑胶", quantity: 3, unit: "sheets", threshold: 2, storage: "Drawer B")
+    ]
 }

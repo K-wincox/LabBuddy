@@ -44,6 +44,20 @@ struct ActiveLabTimer: Identifiable, Codable, Equatable {
     }
 }
 
+struct InventoryItem: Identifiable, Codable, Hashable {
+    let id: String
+    let name: String
+    let category: String
+    var quantity: Double
+    let unit: String
+    let threshold: Double
+    let storage: String
+
+    var isLowStock: Bool {
+        quantity <= threshold
+    }
+}
+
 struct ProtocolIngredient: Identifiable, Hashable {
     let id = UUID()
     let name: String
