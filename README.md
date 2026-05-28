@@ -18,8 +18,10 @@ LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first u
 - App-local labeled timers can be started from experiment cards and persist between launches.
 - Bench Mode opens a focused, large-control execution view for one active experiment.
 - Protocol tab previews proportional recipe scaling and imports scaled runs into Today.
+- Imported runs can be removed from Today so repeated demos stay tidy.
 - Tools tab has interactive mass, dilution, and percentage calculators plus quick examples.
 - Inventory tab tracks local reagent/material quantities with low-stock warnings and quick adjustments.
+- Inventory includes a local demo reset action for repeated Xcode testing.
 - Bench completion can generate a first Data Card preview with run metadata and LabBuddy branding.
 - Data Cards include a local mentor-report summary draft.
 
@@ -35,6 +37,7 @@ LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first u
 8. Open Inventory and try quick deduct/restock on a low-stock item.
 9. Finish a run in Bench Mode or tap the share button to preview the first Data Card.
 10. Generate the local report summary draft from the Data Card.
+11. Use Inventory's reset action if you want to replay the demo from a clean local state.
 
 ## Verification status
 

@@ -47,6 +47,12 @@
 - Inventory quantities persist in `UserDefaults`.
 - Low-stock items are visually marked and can be quickly deducted or restocked.
 
+## 2026-05-28 demo-reset follow-up
+
+- Imported Today runs can be removed individually.
+- Inventory now exposes a reset action to clear imported runs, step completion, active timers, and inventory edits.
+- The reset path keeps repeated local Xcode demos from accumulating stale prototype state.
+
 ## Verification
 
 - Swift toolchain exists: Swift 6.3.2.

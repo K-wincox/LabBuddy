@@ -7,6 +7,9 @@ struct ContentView: View {
     var body: some View {
         TabView {
             TodayView(importedRuns: importedRuns)
+                .environment(\.removeImportedRun, { runID in
+                    importedRuns.removeAll { $0.id == runID }
+                })
                 .tabItem {
                     Label("今日", systemImage: "calendar")
                 }
@@ -23,7 +26,10 @@ struct ContentView: View {
                     Label("工具", systemImage: "function")
                 }
 
-            InventoryView(items: $inventoryItems)
+            InventoryView(
+                items: $inventoryItems,
+                resetDemoData: resetDemoData
+            )
                 .tabItem {
                     Label("库存", systemImage: "shippingbox")
                 }
@@ -113,6 +119,15 @@ struct ContentView: View {
         UserDefaults.standard.set(data, forKey: "inventoryItems")
     }
 
+    private func resetDemoData() {
+        importedRuns = []
+        inventoryItems = SampleData.inventory
+        UserDefaults.standard.removeObject(forKey: "completedStepIDs")
+        UserDefaults.standard.removeObject(forKey: "activeLabTimers")
+        UserDefaults.standard.removeObject(forKey: "importedLabRuns")
+        UserDefaults.standard.removeObject(forKey: "inventoryItems")
+    }
+
     private func estimatedMinutes(from text: String) -> Int? {
         let digits = text.prefix { $0.isNumber }
         guard let minutes = Int(digits), minutes > 0 else {
@@ -128,6 +143,7 @@ struct ContentView: View {
 
 private struct TodayView: View {
     let importedRuns: [LabRun]
+    @Environment(\.removeImportedRun) private var removeImportedRun
     @AppStorage("completedStepIDs") private var completedStepIDsData = ""
     @State private var activeTimers: [ActiveLabTimer] = []
     @State private var selectedDataCardRun: LabRun?
@@ -181,7 +197,8 @@ private struct TodayView: View {
                             },
                             startTimer: { startTimer(for: run) },
                             showDataCard: { selectedDataCardRun = run },
-                            openBenchMode: { focusedRun = run }
+                            openBenchMode: { focusedRun = run },
+                            removeRun: run.id.hasPrefix("import-") ? { removeImportedRun(run.id) } : nil
                         )
                     }
                 }
@@ -389,6 +406,7 @@ private struct RunCard: View {
     let startTimer: () -> Void
     let showDataCard: () -> Void
     let openBenchMode: () -> Void
+    let removeRun: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -458,6 +476,17 @@ private struct RunCard: View {
                 .buttonStyle(.bordered)
                 .controlSize(.large)
                 .accessibilityLabel("生成结果卡片")
+
+                if let removeRun {
+                    Button(action: removeRun) {
+                        Image(systemName: "trash")
+                            .frame(width: 46, height: 28)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .foregroundStyle(.red)
+                    .accessibilityLabel("移除导入实验")
+                }
             }
         }
         .padding(16)
@@ -897,6 +926,7 @@ private struct ToolsView: View {
 
 private struct InventoryView: View {
     @Binding var items: [InventoryItem]
+    let resetDemoData: () -> Void
 
     private var lowStockCount: Int {
         items.filter(\.isLowStock).count
@@ -927,6 +957,13 @@ private struct InventoryView: View {
                     ForEach($items) { $item in
                         InventoryItemCard(item: $item)
                     }
+
+                    Button(role: .destructive, action: resetDemoData) {
+                        Label("重置本地体验数据", systemImage: "arrow.counterclockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
                 .padding(18)
             }
@@ -1002,6 +1039,17 @@ private struct InventoryItemCard: View {
         }
         .padding(16)
         .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct RemoveImportedRunKey: EnvironmentKey {
+    static let defaultValue: (String) -> Void = { _ in }
+}
+
+private extension EnvironmentValues {
+    var removeImportedRun: (String) -> Void {
+        get { self[RemoveImportedRunKey.self] }
+        set { self[RemoveImportedRunKey.self] = newValue }
     }
 }
 

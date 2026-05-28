@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 Phase: 1 of 8 (iOS Local Foundation)
 Plan: 3 of 3 in current phase
 Status: Phase 1 implementation complete; awaiting Xcode runtime verification
-Last activity: 2026-05-28 — Added a local Inventory tab with persisted quantities and low-stock warnings.
+Last activity: 2026-05-28 — Added local demo cleanup controls for imported runs and persisted prototype state.
 
 Progress: [█░░░░░░░░░] 11%
 
@@ -74,5 +74,5 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-05-28
-Stopped at: Phase 1 implementation complete in code with local Inventory experience; next step is Xcode runtime verification.
+Stopped at: Phase 1 implementation complete in code with reusable local demo controls; next step is Xcode runtime verification.
 Resume file: None
