@@ -18,13 +18,19 @@ struct ContentView: View {
                     tomorrowRuns.removeAll { $0.id == runID }
                 })
                 .environment(\.tomorrowRuns, tomorrowRuns)
+                .environment(\.scheduleProtocolRun, { labProtocol, targetVolume, targetDay, timeLabel in
+                    importRun(
+                        from: labProtocol,
+                        targetVolume: targetVolume,
+                        targetDay: targetDay,
+                        timeLabel: timeLabel
+                    )
+                })
                 .tabItem {
                     Label("今日", systemImage: "calendar")
                 }
 
-            ProtocolsView { labProtocol, targetVolume in
-                importRun(from: labProtocol, targetVolume: targetVolume, targetDay: .tomorrow)
-            }
+            ProtocolsView()
                 .tabItem {
                     Label("Protocol", systemImage: "list.clipboard")
                 }
@@ -59,7 +65,7 @@ struct ContentView: View {
         }
     }
 
-    private func importRun(from labProtocol: LabProtocol, targetVolume: Double, targetDay: PlanTargetDay) {
+    private func importRun(from labProtocol: LabProtocol, targetVolume: Double, targetDay: PlanTargetDay, timeLabel: String) {
         let factor = targetVolume / labProtocol.baseVolume
         let recipeSummary = labProtocol.ingredients
             .prefix(3)
@@ -79,8 +85,8 @@ struct ContentView: View {
             id: "import-\(targetDay.rawValue)-\(labProtocol.id)-\(Int(Date().timeIntervalSince1970))",
             title: labProtocol.name,
             area: labProtocol.area,
-            timeLabel: targetDay == .today ? "现在" : "明天",
-            status: targetDay == .today ? "刚导入" : "明日计划",
+            timeLabel: timeLabel,
+            status: targetDay == .today ? "已排期" : "明日计划",
             protocolName: labProtocol.name,
             scaledVolumeLabel: "\(formattedVolume(targetVolume)) \(labProtocol.volumeUnit) · x\(String(format: "%.2f", factor))",
             steps: [
@@ -194,6 +200,7 @@ private struct TodayView: View {
     let importedRuns: [LabRun]
     @Environment(\.removeImportedRun) private var removeImportedRun
     @Environment(\.tomorrowRuns) private var tomorrowRuns
+    @Environment(\.scheduleProtocolRun) private var scheduleProtocolRun
     @AppStorage("completedStepIDs") private var completedStepIDsData = ""
     @State private var activeTimers: [ActiveLabTimer] = []
     @State private var selectedDataCardRun: LabRun?
@@ -201,6 +208,7 @@ private struct TodayView: View {
     @State private var selectedMode: TodayMode = .records
     @State private var calendarScale = 0.72
     @State private var selectedRecordDayID = "today"
+    @State private var scheduleRequest: ScheduleRequest?
 
     private var completedStepIDs: Set<String> {
         get { Set(completedStepIDsData.split(separator: ",").map(String.init)) }
@@ -288,6 +296,14 @@ private struct TodayView: View {
                             emptySubtitle: selectedRecordDay.id == "tomorrow" ? "在 Protocol 中编辑模板后导入明天。" : "完成实验后会在这里沉淀成记录。"
                         )
                     case .today:
+                        TimelineScheduleStrip(
+                            title: "今天的空白时间",
+                            slots: ["08:30", "11:00", "15:00", "18:30"],
+                            action: { timeLabel in
+                                scheduleRequest = ScheduleRequest(targetDay: .today, timeLabel: timeLabel)
+                            }
+                        )
+
                         if !activeTimers.isEmpty {
                             TimerDock(activeTimers: activeTimers, stopTimer: stopTimer)
                         }
@@ -319,7 +335,10 @@ private struct TodayView: View {
                             removeRun: { runID in
                                 removeImportedRun(runID)
                             },
-                            showDataCard: { selectedDataCardRun = $0 }
+                            showDataCard: { selectedDataCardRun = $0 },
+                            addAtTime: { timeLabel in
+                                scheduleRequest = ScheduleRequest(targetDay: .tomorrow, timeLabel: timeLabel)
+                            }
                         )
                     }
                 }
@@ -329,6 +348,14 @@ private struct TodayView: View {
             .navigationTitle("今日")
             .sheet(item: $selectedDataCardRun) { run in
                 DataCardPreview(run: run, completedStepIDs: completedStepIDs)
+            }
+            .sheet(item: $scheduleRequest) { request in
+                ProtocolScheduleSheet(
+                    request: request,
+                    schedule: { labProtocol, targetVolume, targetDay, timeLabel in
+                        scheduleProtocolRun(labProtocol, targetVolume, targetDay, timeLabel)
+                    }
+                )
             }
             .sheet(item: $focusedRun) { run in
                 BenchModeView(
@@ -411,6 +438,12 @@ private struct TodayView: View {
     private func completedCount(in runs: [LabRun]) -> Int {
         runs.flatMap(\.steps).filter { completedStepIDs.contains($0.id) }.count
     }
+}
+
+private struct ScheduleRequest: Identifiable {
+    let id = UUID()
+    let targetDay: PlanTargetDay
+    let timeLabel: String
 }
 
 private enum TodayMode: String, CaseIterable, Identifiable {
@@ -825,14 +858,125 @@ private struct RunCard: View {
     }
 }
 
+private struct TimelineScheduleStrip: View {
+    let title: String
+    let slots: [String]
+    let action: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(slots, id: \.self) { slot in
+                        Button {
+                            action(slot)
+                        } label: {
+                            VStack(spacing: 6) {
+                                Text(slot)
+                                    .font(.headline.monospacedDigit())
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title3)
+                            }
+                            .frame(width: 88, height: 72)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct ProtocolScheduleSheet: View {
+    let request: ScheduleRequest
+    let schedule: (LabProtocol, Double, PlanTargetDay, String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var targetVolume = 50.0
+    @State private var selectedProtocolID = SampleData.protocols.first?.id ?? ""
+
+    private var selectedProtocol: LabProtocol {
+        SampleData.protocols.first { $0.id == selectedProtocolID } ?? SampleData.protocols[0]
+    }
+
+    private var destinationTitle: String {
+        request.targetDay == .today ? "今天 \(request.timeLabel)" : "明天 \(request.timeLabel)"
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("空白时间") {
+                    Label(destinationTitle, systemImage: "calendar.badge.plus")
+                        .font(.headline)
+                }
+
+                Section("选择 Protocol") {
+                    Picker("Protocol", selection: $selectedProtocolID) {
+                        ForEach(SampleData.protocols) { labProtocol in
+                            Text(labProtocol.name).tag(labProtocol.id)
+                        }
+                    }
+                    HStack {
+                        Text("目标体积")
+                        Spacer()
+                        Text("\(Int(targetVolume)) \(selectedProtocol.volumeUnit)")
+                            .font(.headline.monospacedDigit())
+                    }
+                    Slider(value: $targetVolume, in: 10...200, step: 10)
+                }
+
+                Section("排期预览") {
+                    MetadataRow(label: "实验类型", value: selectedProtocol.area.rawValue)
+                    MetadataRow(label: "预计时长", value: selectedProtocol.expectedDuration)
+                    MetadataRow(label: "变量检查", value: protocolConsistencyIssues(selectedProtocol).isEmpty ? "一致" : "需复核")
+                    ForEach(selectedProtocol.steps.prefix(3)) { step in
+                        Label(step.title, systemImage: step.durationMinutes == nil ? "circle" : "timer")
+                    }
+                }
+
+                Section {
+                    Button {
+                        schedule(selectedProtocol, targetVolume, request.targetDay, request.timeLabel)
+                        dismiss()
+                    } label: {
+                        Label("加入时间流", systemImage: "calendar.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .navigationTitle("添加实验")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
 private struct TomorrowPlanView: View {
     let runs: [LabRun]
     let completedStepIDs: Set<String>
     let removeRun: (String) -> Void
     let showDataCard: (LabRun) -> Void
+    let addAtTime: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            TimelineScheduleStrip(
+                title: "明天的空白时间",
+                slots: ["09:00", "10:30", "14:00", "16:30", "20:00"],
+                action: addAtTime
+            )
+
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -1163,17 +1307,19 @@ private struct StepRow: View {
 
 private struct ProtocolsView: View {
     @State private var targetVolume = 50.0
-    @State private var importedProtocolName: String?
     @State private var editableProtocols = SampleData.protocols
     @State private var selectedProtocol: LabProtocol?
-    let importRun: (LabProtocol, Double) -> Void
+    @State private var extractionSource: ProtocolSourceType?
+    @State private var sharedProtocolName: String?
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("选择模板后可先修改参数、成分和步骤，再导入今日安排。")
+                        Text("方法资产库")
+                            .font(.headline)
+                        Text("管理模板、公式变量、步骤参数和来源；排期请回到今日页的空白时间添加。")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         HStack {
@@ -1188,14 +1334,31 @@ private struct ProtocolsView: View {
                 }
 
                 Section {
-                    Button {
-                        selectedProtocol = emptyProtocol()
-                    } label: {
-                        Label("导入/新建 Protocol", systemImage: "square.and.arrow.down")
-                            .frame(maxWidth: .infinity)
+                    VStack(spacing: 10) {
+                        HStack(spacing: 10) {
+                            Button {
+                                selectedProtocol = emptyProtocol()
+                            } label: {
+                                Label("新建", systemImage: "plus.circle")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+
+                            Menu {
+                                ForEach(ProtocolSourceType.allCases) { sourceType in
+                                    Button(sourceType.rawValue) {
+                                        extractionSource = sourceType
+                                    }
+                                }
+                            } label: {
+                                Label("提取", systemImage: "doc.text.viewfinder")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
                 }
@@ -1204,13 +1367,11 @@ private struct ProtocolsView: View {
                     ProtocolCard(
                         labProtocol: labProtocol,
                         targetVolume: targetVolume,
-                        isRecentlyImported: importedProtocolName == labProtocol.name,
-                        importRun: {
-                            importRun(labProtocol, targetVolume)
-                            importedProtocolName = labProtocol.name
-                        },
                         editProtocol: {
                             selectedProtocol = labProtocol
+                        },
+                        shareProtocol: {
+                            sharedProtocolName = labProtocol.name
                         }
                     )
                         .listRowSeparator(.hidden)
@@ -1218,20 +1379,31 @@ private struct ProtocolsView: View {
                 }
             }
             .listStyle(.plain)
-            .navigationTitle("Protocol")
+            .navigationTitle("")
             .sheet(item: $selectedProtocol) { labProtocol in
                 ProtocolEditorView(
                     labProtocol: labProtocol,
                     targetVolume: targetVolume,
                     saveProtocol: { updatedProtocol in
                         upsert(updatedProtocol)
-                    },
-                    importProtocol: { updatedProtocol in
-                        upsert(updatedProtocol)
-                        importRun(updatedProtocol, targetVolume)
-                        importedProtocolName = updatedProtocol.name
                     }
                 )
+            }
+            .sheet(item: $extractionSource) { sourceType in
+                ProtocolExtractionView(sourceType: sourceType) { extracted in
+                    upsert(extracted)
+                    selectedProtocol = extracted
+                }
+            }
+            .alert("Protocol 已准备分享", isPresented: Binding(
+                get: { sharedProtocolName != nil },
+                set: { if !$0 { sharedProtocolName = nil } }
+            )) {
+                Button("完成", role: .cancel) {
+                    sharedProtocolName = nil
+                }
+            } message: {
+                Text(sharedProtocolName ?? "")
             }
         }
     }
@@ -1257,7 +1429,11 @@ private struct ProtocolsView: View {
             ],
             steps: [
                 LabStep(id: UUID().uuidString, title: "第一步", detail: "填写操作条件", durationMinutes: nil, isCarryOver: false)
-            ]
+            ],
+            variables: [
+                ProtocolVariable(symbol: "V_total", name: "总体积", value: targetVolume, unit: "ml", formula: "baseVolume")
+            ],
+            source: ProtocolSource(type: .sop, title: "手动创建", confidence: 1.0)
         )
     }
 }
@@ -1265,12 +1441,15 @@ private struct ProtocolsView: View {
 private struct ProtocolCard: View {
     let labProtocol: LabProtocol
     let targetVolume: Double
-    let isRecentlyImported: Bool
-    let importRun: () -> Void
     let editProtocol: () -> Void
+    let shareProtocol: () -> Void
 
     private var scaleFactor: Double {
         targetVolume / labProtocol.baseVolume
+    }
+
+    private var consistencyIssues: [String] {
+        protocolConsistencyIssues(labProtocol)
     }
 
     var body: some View {
@@ -1284,12 +1463,37 @@ private struct ProtocolCard: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("x\(scaleFactor, specifier: "%.2f")")
-                    .font(.caption.monospacedDigit().weight(.bold))
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .background(Color.teal.opacity(0.12), in: Capsule())
-                    .foregroundStyle(.teal)
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text("x\(scaleFactor, specifier: "%.2f")")
+                        .font(.caption.monospacedDigit().weight(.bold))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .background(Color.teal.opacity(0.12), in: Capsule())
+                        .foregroundStyle(.teal)
+                    Label(consistencyIssues.isEmpty ? "一致" : "\(consistencyIssues.count) 项检查", systemImage: consistencyIssues.isEmpty ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(consistencyIssues.isEmpty ? .teal : .orange)
+                }
+            }
+
+            if let source = labProtocol.source {
+                Label("\(source.type.rawValue) · \(source.title)", systemImage: "doc.text")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !labProtocol.variables.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(labProtocol.variables) { variable in
+                            Text("\(variable.symbol)=\(formatDecimal(variable.value)) \(variable.unit)")
+                                .font(.caption.monospacedDigit().weight(.semibold))
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 6)
+                                .background(Color.labInset, in: Capsule())
+                        }
+                    }
+                }
             }
 
             ForEach(labProtocol.ingredients) { ingredient in
@@ -1303,38 +1507,33 @@ private struct ProtocolCard: View {
                 .font(.subheadline)
             }
 
-            if isRecentlyImported {
-                HStack(spacing: 10) {
-                    Button(action: editProtocol) {
-                        Label("编辑", systemImage: "slider.horizontal.3")
-                            .frame(maxWidth: .infinity)
+            if !consistencyIssues.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(consistencyIssues.prefix(2), id: \.self) { issue in
+                        Label(issue, systemImage: "exclamationmark.circle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-
-                    Button(action: importRun) {
-                        Label("已导入今日", systemImage: "checkmark.circle.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
                 }
-            } else {
-                HStack(spacing: 10) {
-                    Button(action: editProtocol) {
-                        Label("编辑", systemImage: "slider.horizontal.3")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+                .padding(10)
+                .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+            }
 
-                    Button(action: importRun) {
-                        Label("导入今日", systemImage: "calendar.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+            HStack(spacing: 10) {
+                Button(action: editProtocol) {
+                    Label("编辑", systemImage: "slider.horizontal.3")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button(action: shareProtocol) {
+                    Image(systemName: "square.and.arrow.up")
+                        .frame(width: 46, height: 28)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .accessibilityLabel("分享 Protocol")
             }
         }
         .padding(16)
@@ -1346,19 +1545,16 @@ private struct ProtocolEditorView: View {
     @State private var draft: LabProtocol
     let targetVolume: Double
     let saveProtocol: (LabProtocol) -> Void
-    let importProtocol: (LabProtocol) -> Void
     @Environment(\.dismiss) private var dismiss
 
     init(
         labProtocol: LabProtocol,
         targetVolume: Double,
-        saveProtocol: @escaping (LabProtocol) -> Void,
-        importProtocol: @escaping (LabProtocol) -> Void
+        saveProtocol: @escaping (LabProtocol) -> Void
     ) {
         _draft = State(initialValue: labProtocol)
         self.targetVolume = targetVolume
         self.saveProtocol = saveProtocol
-        self.importProtocol = importProtocol
     }
 
     private var scaleFactor: Double {
@@ -1366,6 +1562,10 @@ private struct ProtocolEditorView: View {
             return 1
         }
         return targetVolume / draft.baseVolume
+    }
+
+    private var consistencyIssues: [String] {
+        protocolConsistencyIssues(draft)
     }
 
     var body: some View {
@@ -1389,6 +1589,61 @@ private struct ProtocolEditorView: View {
                             .frame(width: 54)
                     }
                     TextField("预计时长", text: $draft.expectedDuration)
+                }
+
+                Section("来源与一致性") {
+                    if let source = draft.source {
+                        HStack {
+                            Label(source.type.rawValue, systemImage: "doc.text.viewfinder")
+                            Spacer()
+                            Text("\(Int(source.confidence * 100))%")
+                                .font(.caption.monospacedDigit().weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(source.title)
+                            .font(.subheadline)
+                    } else {
+                        Text("无来源信息")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if consistencyIssues.isEmpty {
+                        Label("变量、成分和步骤参数一致", systemImage: "checkmark.seal.fill")
+                            .foregroundStyle(.teal)
+                    } else {
+                        ForEach(consistencyIssues, id: \.self) { issue in
+                            Label(issue, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+
+                Section("公式变量") {
+                    ForEach($draft.variables) { $variable in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                TextField("符号", text: $variable.symbol)
+                                    .frame(width: 88)
+                                TextField("名称", text: $variable.name)
+                            }
+                            HStack {
+                                TextField("数值", value: $variable.value, format: .number)
+                                TextField("单位", text: $variable.unit)
+                                    .frame(width: 70)
+                            }
+                            TextField("公式定义", text: $variable.formula)
+                                .font(.body.monospaced())
+                        }
+                    }
+                    .onDelete { offsets in
+                        draft.variables.remove(atOffsets: offsets)
+                    }
+
+                    Button {
+                        draft.variables.append(ProtocolVariable(symbol: "x", name: "新变量", value: 1, unit: draft.volumeUnit, formula: ""))
+                    } label: {
+                        Label("增加变量", systemImage: "plus.circle")
+                    }
                 }
 
                 Section("成分参数") {
@@ -1435,6 +1690,7 @@ private struct ProtocolEditorView: View {
                                     step: 5
                                 )
                             }
+                            VariableRefPicker(step: $step, variables: draft.variables)
                             Toggle("顺延占位", isOn: $step.isCarryOver)
                         }
                     }
@@ -1448,16 +1704,6 @@ private struct ProtocolEditorView: View {
                         Label("增加步骤", systemImage: "plus.circle")
                     }
                 }
-
-                Section {
-                    Button {
-                        importProtocol(draft)
-                        dismiss()
-                    } label: {
-                        Label("保存并导入今日安排", systemImage: "calendar.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                }
             }
             .navigationTitle("编辑 Protocol")
             .toolbar {
@@ -1469,6 +1715,139 @@ private struct ProtocolEditorView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
                         saveProtocol(draft)
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct VariableRefPicker: View {
+    @Binding var step: LabStep
+    let variables: [ProtocolVariable]
+
+    var body: some View {
+        if !variables.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("关联变量")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                FlowVariableChips(variables: variables, selectedSymbols: $step.variableRefs)
+            }
+        }
+    }
+}
+
+private struct FlowVariableChips: View {
+    let variables: [ProtocolVariable]
+    @Binding var selectedSymbols: [String]
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 8)], spacing: 8) {
+            ForEach(variables) { variable in
+                Button {
+                    toggle(variable.symbol)
+                } label: {
+                    Text(variable.symbol)
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                }
+                .buttonStyle(.bordered)
+                .tint(selectedSymbols.contains(variable.symbol) ? .teal : .secondary)
+            }
+        }
+    }
+
+    private func toggle(_ symbol: String) {
+        if selectedSymbols.contains(symbol) {
+            selectedSymbols.removeAll { $0 == symbol }
+        } else {
+            selectedSymbols.append(symbol)
+        }
+    }
+}
+
+private struct ProtocolExtractionView: View {
+    let sourceType: ProtocolSourceType
+    let accept: (LabProtocol) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var sourceTitle = ""
+    @State private var extractedName = ""
+    @State private var extractedVolume = 50.0
+    @State private var confidence = 0.86
+
+    private var previewProtocol: LabProtocol {
+        LabProtocol(
+            id: "extracted-\(sourceType.rawValue)-\(Int(Date().timeIntervalSince1970))",
+            name: extractedName.isEmpty ? "\(sourceType.rawValue) 提取 Protocol" : extractedName,
+            area: sourceType == .kitManual ? .cloning : .cell,
+            baseVolume: extractedVolume,
+            volumeUnit: sourceType == .kitManual ? "ul" : "ml",
+            expectedDuration: sourceType == .literature ? "45 min" : "20 min",
+            ingredients: [
+                ProtocolIngredient(name: "提取成分 A", standardAmount: extractedVolume * 0.8, unit: sourceType == .kitManual ? "ul" : "ml"),
+                ProtocolIngredient(name: "提取成分 B", standardAmount: extractedVolume * 0.2, unit: sourceType == .kitManual ? "ul" : "ml")
+            ],
+            steps: [
+                LabStep(id: UUID().uuidString, title: "核对来源参数", detail: "检查温度、时间、转速和体积", durationMinutes: nil, isCarryOver: false, variableRefs: ["V_total"]),
+                LabStep(id: UUID().uuidString, title: "执行提取方法", detail: "按来源方法完成关键步骤", durationMinutes: 20, isCarryOver: false, variableRefs: ["t_core"])
+            ],
+            variables: [
+                ProtocolVariable(symbol: "V_total", name: "总体积", value: extractedVolume, unit: sourceType == .kitManual ? "ul" : "ml", formula: "source.totalVolume"),
+                ProtocolVariable(symbol: "t_core", name: "核心反应时间", value: 20, unit: "min", formula: "source.incubationTime")
+            ],
+            source: ProtocolSource(type: sourceType, title: sourceTitle.isEmpty ? "待补充来源标题" : sourceTitle, confidence: confidence)
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("来源") {
+                    Text(sourceType.rawValue)
+                        .font(.headline)
+                    TextField("文献题名 / 手册名称 / SOP 编号", text: $sourceTitle)
+                    TextField("提取后的 Protocol 名称", text: $extractedName)
+                }
+
+                Section("提取结果预览") {
+                    HStack {
+                        Text("基准体积")
+                        Spacer()
+                        TextField("0", value: $extractedVolume, format: .number)
+                            .multilineTextAlignment(TextAlignment.trailing)
+                            .frame(width: 92)
+                    }
+                    HStack {
+                        Text("置信度")
+                        Spacer()
+                        Text("\(Int(confidence * 100))%")
+                            .font(.headline.monospacedDigit())
+                    }
+                    Slider(value: $confidence, in: 0.55...0.98)
+
+                    ForEach(previewProtocol.variables) { variable in
+                        MetadataRow(label: variable.symbol, value: "\(formatDecimal(variable.value)) \(variable.unit) · \(variable.formula)")
+                    }
+                }
+
+                Section {
+                    Button {
+                        accept(previewProtocol)
+                        dismiss()
+                    } label: {
+                        Label("接受并继续编辑", systemImage: "checkmark.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .navigationTitle("提取 Protocol")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
                         dismiss()
                     }
                 }
@@ -1821,6 +2200,10 @@ private struct TomorrowRunsKey: EnvironmentKey {
     static let defaultValue: [LabRun] = []
 }
 
+private struct ScheduleProtocolRunKey: EnvironmentKey {
+    static let defaultValue: (LabProtocol, Double, PlanTargetDay, String) -> Void = { _, _, _, _ in }
+}
+
 private extension EnvironmentValues {
     var removeImportedRun: (String) -> Void {
         get { self[RemoveImportedRunKey.self] }
@@ -1830,6 +2213,11 @@ private extension EnvironmentValues {
     var tomorrowRuns: [LabRun] {
         get { self[TomorrowRunsKey.self] }
         set { self[TomorrowRunsKey.self] = newValue }
+    }
+
+    var scheduleProtocolRun: (LabProtocol, Double, PlanTargetDay, String) -> Void {
+        get { self[ScheduleProtocolRunKey.self] }
+        set { self[ScheduleProtocolRunKey.self] = newValue }
     }
 }
 
@@ -2101,6 +2489,40 @@ private func defaultRestock(for unit: String) -> Double {
     default:
         return 50
     }
+}
+
+private func protocolConsistencyIssues(_ labProtocol: LabProtocol) -> [String] {
+    var issues: [String] = []
+    let ingredientTotal = labProtocol.ingredients.reduce(0) { $0 + $1.standardAmount }
+    if abs(ingredientTotal - labProtocol.baseVolume) > max(0.2, labProtocol.baseVolume * 0.08) {
+        issues.append("成分总量与基准体积不一致")
+    }
+
+    let symbols = Set(labProtocol.variables.map(\.symbol))
+    let missingRefs = labProtocol.steps
+        .flatMap(\.variableRefs)
+        .filter { !symbols.contains($0) }
+    if let firstMissing = missingRefs.first {
+        issues.append("步骤引用了未定义变量 \(firstMissing)")
+    }
+
+    for variable in labProtocol.variables where variable.formula.contains("step.duration") {
+        let hasTimedStep = labProtocol.steps.contains { step in
+            step.variableRefs.contains(variable.symbol) && step.durationMinutes != nil
+        }
+        if !hasTimedStep {
+            issues.append("\(variable.symbol) 缺少计时步骤")
+        }
+    }
+
+    let duplicateSymbols = Dictionary(grouping: labProtocol.variables.map(\.symbol), by: { $0 })
+        .filter { $0.value.count > 1 }
+        .map(\.key)
+    if let duplicate = duplicateSymbols.first {
+        issues.append("变量 \(duplicate) 重复定义")
+    }
+
+    return issues
 }
 
 private extension Color {
