@@ -7,6 +7,7 @@ import AppKit
 
 struct ContentView: View {
     @State private var importedRuns: [LabRun] = []
+    @State private var tomorrowRuns: [LabRun] = []
     @State private var inventoryItems: [InventoryItem] = SampleData.inventory
 
     var body: some View {
@@ -14,13 +15,15 @@ struct ContentView: View {
             TodayView(importedRuns: importedRuns)
                 .environment(\.removeImportedRun, { runID in
                     importedRuns.removeAll { $0.id == runID }
+                    tomorrowRuns.removeAll { $0.id == runID }
                 })
+                .environment(\.tomorrowRuns, tomorrowRuns)
                 .tabItem {
                     Label("今日", systemImage: "calendar")
                 }
 
             ProtocolsView { labProtocol, targetVolume in
-                importRun(from: labProtocol, targetVolume: targetVolume)
+                importRun(from: labProtocol, targetVolume: targetVolume, targetDay: .tomorrow)
             }
                 .tabItem {
                     Label("Protocol", systemImage: "list.clipboard")
@@ -31,15 +34,10 @@ struct ContentView: View {
                     Label("工具", systemImage: "function")
                 }
 
-            InventoryView(
+            ProfileView(
                 items: $inventoryItems,
                 resetDemoData: resetDemoData
             )
-                .tabItem {
-                    Label("库存", systemImage: "shippingbox")
-                }
-
-            ProfileView()
                 .tabItem {
                     Label("我的", systemImage: "person.crop.circle")
                 }
@@ -47,17 +45,21 @@ struct ContentView: View {
         .tint(.teal)
         .onAppear {
             loadImportedRuns()
+            loadTomorrowRuns()
             loadInventoryItems()
         }
         .onChange(of: importedRuns) {
             saveImportedRuns(importedRuns)
+        }
+        .onChange(of: tomorrowRuns) {
+            saveTomorrowRuns(tomorrowRuns)
         }
         .onChange(of: inventoryItems) {
             saveInventoryItems(inventoryItems)
         }
     }
 
-    private func importRun(from labProtocol: LabProtocol, targetVolume: Double) {
+    private func importRun(from labProtocol: LabProtocol, targetVolume: Double, targetDay: PlanTargetDay) {
         let factor = targetVolume / labProtocol.baseVolume
         let recipeSummary = labProtocol.ingredients
             .prefix(3)
@@ -74,11 +76,11 @@ struct ContentView: View {
             )
         ] : labProtocol.steps
         let run = LabRun(
-            id: "import-\(labProtocol.id)-\(Int(Date().timeIntervalSince1970))",
+            id: "import-\(targetDay.rawValue)-\(labProtocol.id)-\(Int(Date().timeIntervalSince1970))",
             title: labProtocol.name,
             area: labProtocol.area,
-            timeLabel: "现在",
-            status: "刚导入",
+            timeLabel: targetDay == .today ? "现在" : "明天",
+            status: targetDay == .today ? "刚导入" : "明日计划",
             protocolName: labProtocol.name,
             scaledVolumeLabel: "\(formattedVolume(targetVolume)) \(labProtocol.volumeUnit) · x\(String(format: "%.2f", factor))",
             steps: [
@@ -107,7 +109,12 @@ struct ContentView: View {
                 )
             ]
         )
-        importedRuns.insert(run, at: 0)
+        switch targetDay {
+        case .today:
+            importedRuns.insert(run, at: 0)
+        case .tomorrow:
+            tomorrowRuns.insert(run, at: 0)
+        }
     }
 
     private func loadImportedRuns() {
@@ -123,6 +130,21 @@ struct ContentView: View {
             return
         }
         UserDefaults.standard.set(data, forKey: "importedLabRuns")
+    }
+
+    private func loadTomorrowRuns() {
+        guard let data = UserDefaults.standard.data(forKey: "tomorrowLabRuns"),
+              let runs = try? JSONDecoder().decode([LabRun].self, from: data) else {
+            return
+        }
+        tomorrowRuns = runs
+    }
+
+    private func saveTomorrowRuns(_ runs: [LabRun]) {
+        guard let data = try? JSONEncoder().encode(runs) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: "tomorrowLabRuns")
     }
 
     private func loadInventoryItems() {
@@ -146,6 +168,7 @@ struct ContentView: View {
         UserDefaults.standard.removeObject(forKey: "completedStepIDs")
         UserDefaults.standard.removeObject(forKey: "activeLabTimers")
         UserDefaults.standard.removeObject(forKey: "importedLabRuns")
+        UserDefaults.standard.removeObject(forKey: "tomorrowLabRuns")
         UserDefaults.standard.removeObject(forKey: "inventoryItems")
     }
 
@@ -162,14 +185,22 @@ struct ContentView: View {
     }
 }
 
+private enum PlanTargetDay: String {
+    case today
+    case tomorrow
+}
+
 private struct TodayView: View {
     let importedRuns: [LabRun]
     @Environment(\.removeImportedRun) private var removeImportedRun
+    @Environment(\.tomorrowRuns) private var tomorrowRuns
     @AppStorage("completedStepIDs") private var completedStepIDsData = ""
     @State private var activeTimers: [ActiveLabTimer] = []
     @State private var selectedDataCardRun: LabRun?
     @State private var focusedRun: LabRun?
-    @State private var selectedMode: TodayMode = .plan
+    @State private var selectedMode: TodayMode = .records
+    @State private var calendarScale = 0.72
+    @State private var selectedRecordDayID = "today"
 
     private var completedStepIDs: Set<String> {
         get { Set(completedStepIDsData.split(separator: ",").map(String.init)) }
@@ -190,6 +221,13 @@ private struct TodayView: View {
 
     private var historyDays: [ExperimentDay] {
         [
+            ExperimentDay(
+                id: "tomorrow",
+                dateLabel: "明天",
+                weekday: "Sat",
+                summary: tomorrowRuns.isEmpty ? "暂无计划，从 Protocol 导入后会出现在这里" : "\(tomorrowRuns.count) 个明日实验计划",
+                runs: tomorrowRuns
+            ),
             ExperimentDay(
                 id: "today",
                 dateLabel: "今天",
@@ -221,17 +259,14 @@ private struct TodayView: View {
         ]
     }
 
+    private var selectedRecordDay: ExperimentDay {
+        historyDays.first { $0.id == selectedRecordDayID } ?? historyDays.first { $0.id == "today" } ?? historyDays[0]
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    HeaderPanel(
-                        runCount: todayRuns.count,
-                        timerPointCount: timerPointCount,
-                        carryOverCount: carryOverCount,
-                        activeTimers: activeTimers
-                    )
-
                     Picker("今日视图", selection: $selectedMode) {
                         ForEach(TodayMode.allCases) { mode in
                             Text(mode.title).tag(mode)
@@ -240,7 +275,19 @@ private struct TodayView: View {
                     .pickerStyle(.segmented)
 
                     switch selectedMode {
-                    case .plan:
+                    case .records:
+                        ExperimentCalendarView(
+                            days: historyDays,
+                            selectedDayID: $selectedRecordDayID,
+                            scale: $calendarScale
+                        )
+                        ExperimentDayDetailView(
+                            day: selectedRecordDay,
+                            completedStepIDs: completedStepIDs,
+                            emptyTitle: selectedRecordDay.id == "tomorrow" ? "明天还没有计划" : "这一天还没有实验记录",
+                            emptySubtitle: selectedRecordDay.id == "tomorrow" ? "在 Protocol 中编辑模板后导入明天。" : "完成实验后会在这里沉淀成记录。"
+                        )
+                    case .today:
                         if !activeTimers.isEmpty {
                             TimerDock(activeTimers: activeTimers, stopTimer: stopTimer)
                         }
@@ -265,14 +312,21 @@ private struct TodayView: View {
                                 removeRun: run.id.hasPrefix("import-") ? { removeImportedRun(run.id) } : nil
                             )
                         }
-                    case .history:
-                        ExperimentHistoryView(days: historyDays, completedStepIDs: completedStepIDs)
+                    case .tomorrow:
+                        TomorrowPlanView(
+                            runs: tomorrowRuns,
+                            completedStepIDs: completedStepIDs,
+                            removeRun: { runID in
+                                removeImportedRun(runID)
+                            },
+                            showDataCard: { selectedDataCardRun = $0 }
+                        )
                     }
                 }
                 .padding(18)
             }
             .background(Color.labBackground)
-            .navigationTitle("LabBuddy")
+            .navigationTitle("今日")
             .sheet(item: $selectedDataCardRun) { run in
                 DataCardPreview(run: run, completedStepIDs: completedStepIDs)
             }
@@ -360,17 +414,20 @@ private struct TodayView: View {
 }
 
 private enum TodayMode: String, CaseIterable, Identifiable {
-    case plan
-    case history
+    case records
+    case today
+    case tomorrow
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .plan:
-            return "今日安排"
-        case .history:
+        case .records:
             return "实验记录"
+        case .today:
+            return "今天"
+        case .tomorrow:
+            return "明天"
         }
     }
 }
@@ -383,61 +440,178 @@ private struct ExperimentDay: Identifiable {
     let runs: [LabRun]
 }
 
-private struct ExperimentHistoryView: View {
+private struct ExperimentCalendarView: View {
     let days: [ExperimentDay]
-    let completedStepIDs: Set<String>
+    @Binding var selectedDayID: String
+    @Binding var scale: Double
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(days) { day in
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(day.dateLabel)
-                                .font(.title3.bold())
-                            Text(day.weekday)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(width: 64, alignment: .leading)
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("实验记录")
+                        .font(.title2.bold())
+                    Text("按天回看实验，也可以放大缩小查看密度")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(scale > 0.9 ? "大" : scale < 0.62 ? "小" : "中")
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(Color.teal.opacity(0.12), in: Capsule())
+                    .foregroundStyle(.teal)
+            }
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(day.summary)
-                                .font(.subheadline.weight(.semibold))
-                            Text("\(day.runs.count) 条实验记录")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+            HStack(spacing: 10) {
+                Image(systemName: "minus.magnifyingglass")
+                    .foregroundStyle(.secondary)
+                Slider(value: $scale, in: 0.48...1.08)
+                Image(systemName: "plus.magnifyingglass")
+                    .foregroundStyle(.secondary)
+            }
 
-                    VStack(spacing: 8) {
-                        ForEach(day.runs) { run in
-                            HStack(spacing: 10) {
-                                Text(run.timeLabel)
-                                    .font(.caption.monospacedDigit().weight(.semibold))
-                                    .frame(width: 48, alignment: .leading)
-                                    .foregroundStyle(.secondary)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(run.title)
-                                        .font(.subheadline.weight(.semibold))
-                                    Text("\(run.area.rawValue) · \(completedSteps(for: run))/\(run.steps.count) 步")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.bold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .padding(10)
-                            .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .bottom, spacing: 10) {
+                    ForEach(days) { day in
+                        CalendarDayCell(
+                            day: day,
+                            isSelected: selectedDayID == day.id,
+                            scale: scale
+                        ) {
+                            selectedDayID = day.id
                         }
                     }
                 }
-                .padding(16)
-                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+                .padding(.vertical, 2)
             }
         }
+        .padding(16)
+        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct CalendarDayCell: View {
+    let day: ExperimentDay
+    let isSelected: Bool
+    let scale: Double
+    let select: () -> Void
+
+    private var width: Double {
+        76 + scale * 46
+    }
+
+    private var height: Double {
+        102 + scale * 58
+    }
+
+    var body: some View {
+        Button(action: select) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(day.weekday)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(day.dateLabel)
+                    .font(.headline.bold())
+                Spacer(minLength: 0)
+
+                VStack(alignment: .leading, spacing: max(3, 7 * scale)) {
+                    ForEach(0..<max(day.runs.count, 1), id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(day.runs.isEmpty ? Color.secondary.opacity(0.18) : color(for: index).opacity(isSelected ? 0.92 : 0.58))
+                            .frame(width: max(22, width - 30), height: max(5, 7 * scale))
+                    }
+                }
+
+                Text(day.runs.isEmpty ? "空" : "\(day.runs.count) 项")
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(isSelected ? .white : .secondary)
+            }
+            .padding(12)
+            .frame(width: width, height: height, alignment: .leading)
+            .background(isSelected ? Color.teal : Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(isSelected ? .white : .primary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func color(for index: Int) -> Color {
+        switch index % 3 {
+        case 0:
+            return .teal
+        case 1:
+            return .blue
+        default:
+            return .orange
+        }
+    }
+}
+
+private struct ExperimentDayDetailView: View {
+    let day: ExperimentDay
+    let completedStepIDs: Set<String>
+    let emptyTitle: String
+    let emptySubtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(day.dateLabel)
+                        .font(.title3.bold())
+                    Text(day.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(day.weekday)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            if day.runs.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.title2)
+                        .foregroundStyle(.teal)
+                    Text(emptyTitle)
+                        .font(.headline)
+                    Text(emptySubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(day.runs) { run in
+                        HStack(spacing: 10) {
+                            Text(run.timeLabel)
+                                .font(.caption.monospacedDigit().weight(.semibold))
+                                .frame(width: 48, alignment: .leading)
+                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(run.title)
+                                    .font(.subheadline.weight(.semibold))
+                                Text("\(run.area.rawValue) · \(completedSteps(for: run))/\(run.steps.count) 步")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(10)
+                        .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func completedSteps(for run: LabRun) -> Int {
@@ -648,6 +822,129 @@ private struct RunCard: View {
         }
         .padding(16)
         .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct TomorrowPlanView: View {
+    let runs: [LabRun]
+    let completedStepIDs: Set<String>
+    let removeRun: (String) -> Void
+    let showDataCard: (LabRun) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("明天计划")
+                            .font(.title2.bold())
+                        Text(runs.isEmpty ? "从 Protocol 导入明天要做的实验" : "\(runs.count) 个实验已安排")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.title2)
+                        .foregroundStyle(.teal)
+                }
+            }
+            .padding(16)
+            .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
+            if runs.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Image(systemName: "list.clipboard")
+                        .font(.title2)
+                        .foregroundStyle(.teal)
+                    Text("还没有明日实验")
+                        .font(.headline)
+                    Text("去 Protocol 里选择模板，修改参数后导入，计划会自动出现在这里。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+            } else {
+                ForEach(runs) { run in
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .top, spacing: 12) {
+                            Text(run.timeLabel)
+                                .font(.headline.monospacedDigit())
+                                .foregroundStyle(.teal)
+                                .frame(width: 58, alignment: .leading)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(run.title)
+                                    .font(.headline)
+                                Text("\(run.area.rawValue) · \(run.protocolName)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                Text(run.scaledVolumeLabel)
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+                        }
+
+                        ForEach(run.steps.prefix(3)) { step in
+                            TomorrowStepPreview(step: step)
+                        }
+
+                        HStack(spacing: 10) {
+                            Button {
+                                showDataCard(run)
+                            } label: {
+                                Label("预览卡片", systemImage: "rectangle.on.rectangle")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+
+                            Button(role: .destructive) {
+                                removeRun(run.id)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .frame(width: 44, height: 28)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                            .accessibilityLabel("移除明天计划")
+                        }
+                    }
+                    .padding(16)
+                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+}
+
+private struct TomorrowStepPreview: View {
+    let step: LabStep
+
+    private var iconName: String {
+        step.durationMinutes == nil ? "circle" : "timer"
+    }
+
+    private var iconColor: Color {
+        step.durationMinutes == nil ? .secondary : .blue
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: iconName)
+                .foregroundStyle(iconColor)
+            Text(step.title)
+                .font(.caption.weight(.semibold))
+            Spacer()
+            if let duration = step.durationMinutes {
+                Text("\(duration)m")
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
@@ -1302,42 +1599,35 @@ private struct InventoryView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("个人库存")
-                                    .font(.title2.bold())
-                                Text("\(items.count) 项 · \(lowStockCount) 项低库存")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: lowStockCount > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(lowStockCount > 0 ? .orange : .teal)
-                        }
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("个人库存")
+                            .font(.title2.bold())
+                        Text("\(items.count) 项 · \(lowStockCount) 项低库存")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(16)
-                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
-
-                    ForEach($items) { $item in
-                        InventoryItemCard(item: $item)
-                    }
-
-                    Button(role: .destructive, action: resetDemoData) {
-                        Label("重置本地体验数据", systemImage: "arrow.counterclockwise")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+                    Spacer()
+                    Image(systemName: lowStockCount > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(lowStockCount > 0 ? .orange : .teal)
                 }
-                .padding(18)
             }
-            .background(Color.labBackground)
-            .navigationTitle("库存")
+            .padding(16)
+            .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
+            ForEach($items) { $item in
+                InventoryItemCard(item: $item)
+            }
+
+            Button(role: .destructive, action: resetDemoData) {
+                Label("重置本地体验数据", systemImage: "arrow.counterclockwise")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
         }
     }
 }
@@ -1412,6 +1702,8 @@ private struct InventoryItemCard: View {
 }
 
 private struct ProfileView: View {
+    @Binding var items: [InventoryItem]
+    let resetDemoData: () -> Void
     @AppStorage("profileDisplayName") private var displayName = "未登录用户"
     @AppStorage("profileLabName") private var labName = "个人本地工作区"
     @AppStorage("profileLargeBenchMode") private var largeBenchMode = true
@@ -1476,6 +1768,11 @@ private struct ProfileView: View {
                     }
                     .padding(16)
                     .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
+                    InventoryView(
+                        items: $items,
+                        resetDemoData: resetDemoData
+                    )
                 }
                 .padding(18)
             }
@@ -1520,10 +1817,19 @@ private struct RemoveImportedRunKey: EnvironmentKey {
     static let defaultValue: (String) -> Void = { _ in }
 }
 
+private struct TomorrowRunsKey: EnvironmentKey {
+    static let defaultValue: [LabRun] = []
+}
+
 private extension EnvironmentValues {
     var removeImportedRun: (String) -> Void {
         get { self[RemoveImportedRunKey.self] }
         set { self[RemoveImportedRunKey.self] = newValue }
+    }
+
+    var tomorrowRuns: [LabRun] {
+        get { self[TomorrowRunsKey.self] }
+        set { self[TomorrowRunsKey.self] = newValue }
     }
 }
 
