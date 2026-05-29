@@ -77,6 +77,42 @@ struct InventoryItem: Identifiable, Codable, Hashable {
     let unit: String
     let threshold: Double
     let storage: String
+    var lotNumber: String
+    var openedDate: Date?
+    var expirationDate: Date?
+    var supplier: String
+    var notes: String
+    var isFavorite: Bool
+
+    init(
+        id: String,
+        name: String,
+        category: String,
+        quantity: Double,
+        unit: String,
+        threshold: Double,
+        storage: String,
+        lotNumber: String = "",
+        openedDate: Date? = nil,
+        expirationDate: Date? = nil,
+        supplier: String = "",
+        notes: String = "",
+        isFavorite: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.quantity = quantity
+        self.unit = unit
+        self.threshold = threshold
+        self.storage = storage
+        self.lotNumber = lotNumber
+        self.openedDate = openedDate
+        self.expirationDate = expirationDate
+        self.supplier = supplier
+        self.notes = notes
+        self.isFavorite = isFavorite
+    }
 
     var isLowStock: Bool {
         quantity <= threshold
@@ -177,4 +213,60 @@ struct CalculatorExample: Identifiable, Hashable {
     let title: String
     let input: String
     let result: String
+}
+
+// Phase 3: Calculator history record
+struct CalculationRecord: Identifiable, Codable, Hashable {
+    let id: String
+    let mode: String
+    let label: String
+    let result: String
+    let date: Date
+    var inputs: [String: Double]
+}
+
+// Phase 3: Buffer/medium template
+struct BufferTemplate: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let area: WorkflowArea
+    let baseVolume: Double
+    let volumeUnit: String
+    let ingredients: [ProtocolIngredient]
+}
+
+// Phase 7: Inventory transaction
+struct InventoryTransaction: Identifiable, Codable, Hashable {
+    let id: String
+    let itemID: String
+    let itemName: String
+    let delta: Double
+    let unit: String
+    let note: String
+    let date: Date
+    var isCorrected: Bool = false
+}
+
+// Phase 8: Data card image annotation
+struct CardAnnotation: Identifiable, Codable, Hashable {
+    let id: String
+    var text: String
+    var xNorm: Double
+    var yNorm: Double
+}
+
+// Phase 8: Data card (wrapping a run for sharing)
+struct DataCard: Identifiable, Codable, Hashable {
+    let id: String
+    let runID: String
+    var title: String
+    var experimentType: String
+    var protocolName: String
+    var scaledVolumeLabel: String
+    var dateLabel: String
+    var notes: String
+    var visibleFields: [String]
+    var imageData: Data?
+    var annotations: [CardAnnotation]
+    let createdAt: Date
 }

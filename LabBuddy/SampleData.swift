@@ -164,10 +164,65 @@ enum SampleData {
     ]
 
     static let inventory: [InventoryItem] = [
-        InventoryItem(id: "dmem", name: "DMEM high glucose", category: "培养基", quantity: 420, unit: "ml", threshold: 100, storage: "4 C fridge"),
-        InventoryItem(id: "fbs", name: "FBS", category: "血清", quantity: 38, unit: "ml", threshold: 50, storage: "-20 C box A"),
+        InventoryItem(id: "dmem", name: "DMEM high glucose", category: "培养基", quantity: 420, unit: "ml", threshold: 100, storage: "4 C fridge", supplier: "Gibco"),
+        InventoryItem(id: "fbs", name: "FBS", category: "血清", quantity: 38, unit: "ml", threshold: 50, storage: "-20 C box A", lotNumber: "FBS2024-01", supplier: "Gibco"),
         InventoryItem(id: "trypsin", name: "0.25% Trypsin", category: "细胞实验", quantity: 72, unit: "ml", threshold: 20, storage: "4 C fridge"),
-        InventoryItem(id: "ligase", name: "T4 Ligase", category: "分子克隆", quantity: 6, unit: "ul", threshold: 5, storage: "-20 C enzyme rack"),
+        InventoryItem(id: "ligase", name: "T4 Ligase", category: "分子克隆", quantity: 6, unit: "ul", threshold: 5, storage: "-20 C enzyme rack", supplier: "NEB"),
         InventoryItem(id: "pvdf", name: "PVDF membrane", category: "WB/跑胶", quantity: 3, unit: "sheets", threshold: 2, storage: "Drawer B")
+    ]
+
+    static let bufferTemplates: [BufferTemplate] = [
+        BufferTemplate(
+            id: "pbs",
+            name: "1× PBS",
+            area: .cell,
+            baseVolume: 1000,
+            volumeUnit: "ml",
+            ingredients: [
+                ProtocolIngredient(name: "NaCl", standardAmount: 8.0, unit: "g"),
+                ProtocolIngredient(name: "KCl", standardAmount: 0.2, unit: "g"),
+                ProtocolIngredient(name: "Na₂HPO₄", standardAmount: 1.44, unit: "g"),
+                ProtocolIngredient(name: "KH₂PO₄", standardAmount: 0.24, unit: "g"),
+                ProtocolIngredient(name: "ddH₂O", standardAmount: 1000, unit: "ml")
+            ]
+        ),
+        BufferTemplate(
+            id: "tbst",
+            name: "TBST (Western Blot 洗涤缓冲液)",
+            area: .blot,
+            baseVolume: 1000,
+            volumeUnit: "ml",
+            ingredients: [
+                ProtocolIngredient(name: "Tris-HCl (pH 7.6)", standardAmount: 20, unit: "mM"),
+                ProtocolIngredient(name: "NaCl", standardAmount: 150, unit: "mM"),
+                ProtocolIngredient(name: "Tween-20", standardAmount: 0.1, unit: "%")
+            ]
+        ),
+        BufferTemplate(
+            id: "dmem-complete",
+            name: "DMEM 完全培养基",
+            area: .cell,
+            baseVolume: 200,
+            volumeUnit: "ml",
+            ingredients: [
+                ProtocolIngredient(name: "DMEM high glucose", standardAmount: 180, unit: "ml"),
+                ProtocolIngredient(name: "FBS", standardAmount: 20, unit: "ml"),
+                ProtocolIngredient(name: "Pen/Strep", standardAmount: 2, unit: "ml")
+            ]
+        ),
+        BufferTemplate(
+            id: "loading-buffer",
+            name: "5× SDS Loading Buffer",
+            area: .blot,
+            baseVolume: 10,
+            volumeUnit: "ml",
+            ingredients: [
+                ProtocolIngredient(name: "1M Tris-HCl (pH 6.8)", standardAmount: 1.0, unit: "ml"),
+                ProtocolIngredient(name: "SDS", standardAmount: 2.0, unit: "g"),
+                ProtocolIngredient(name: "Glycerol", standardAmount: 5.0, unit: "ml"),
+                ProtocolIngredient(name: "β-Mercaptoethanol", standardAmount: 0.5, unit: "ml"),
+                ProtocolIngredient(name: "Bromophenol blue", standardAmount: 0.01, unit: "g")
+            ]
+        )
     ]
 }
