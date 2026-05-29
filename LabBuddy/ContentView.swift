@@ -38,6 +38,11 @@ struct ContentView: View {
                 .tabItem {
                     Label("库存", systemImage: "shippingbox")
                 }
+
+            ProfileView()
+                .tabItem {
+                    Label("我的", systemImage: "person.crop.circle")
+                }
         }
         .tint(.teal)
         .onAppear {
@@ -59,6 +64,15 @@ struct ContentView: View {
             .map { "\($0.name) \($0.scaled(by: factor))" }
             .joined(separator: " / ")
         let duration = estimatedMinutes(from: labProtocol.expectedDuration)
+        let editableSteps = labProtocol.steps.isEmpty ? [
+            LabStep(
+                id: "\(labProtocol.id)-execute-\(Int(Date().timeIntervalSince1970))",
+                title: "执行 Protocol",
+                detail: "按缩放后的用量完成 \(labProtocol.name)",
+                durationMinutes: duration,
+                isCarryOver: false
+            )
+        ] : labProtocol.steps
         let run = LabRun(
             id: "import-\(labProtocol.id)-\(Int(Date().timeIntervalSince1970))",
             title: labProtocol.name,
@@ -74,14 +88,16 @@ struct ContentView: View {
                     detail: recipeSummary,
                     durationMinutes: nil,
                     isCarryOver: false
-                ),
+                )
+            ] + editableSteps.map { step in
                 LabStep(
-                    id: "\(labProtocol.id)-execute-\(Int(Date().timeIntervalSince1970))",
-                    title: "执行 Protocol",
-                    detail: "按缩放后的用量完成 \(labProtocol.name)",
-                    durationMinutes: duration,
-                    isCarryOver: false
-                ),
+                    id: "\(labProtocol.id)-\(step.id)-\(Int(Date().timeIntervalSince1970))",
+                    title: step.title,
+                    detail: step.detail,
+                    durationMinutes: step.durationMinutes ?? duration,
+                    isCarryOver: step.isCarryOver
+                )
+            } + [
                 LabStep(
                     id: "\(labProtocol.id)-record-\(Int(Date().timeIntervalSince1970))",
                     title: "记录结果",
@@ -153,6 +169,7 @@ private struct TodayView: View {
     @State private var activeTimers: [ActiveLabTimer] = []
     @State private var selectedDataCardRun: LabRun?
     @State private var focusedRun: LabRun?
+    @State private var selectedMode: TodayMode = .plan
 
     private var completedStepIDs: Set<String> {
         get { Set(completedStepIDsData.split(separator: ",").map(String.init)) }
@@ -171,6 +188,39 @@ private struct TodayView: View {
         todayRuns.flatMap(\.steps).filter(\.isCarryOver).count
     }
 
+    private var historyDays: [ExperimentDay] {
+        [
+            ExperimentDay(
+                id: "today",
+                dateLabel: "今天",
+                weekday: "Fri",
+                summary: "\(todayRuns.count) 个实验 · \(completedCount(in: todayRuns))/\(todayRuns.flatMap(\.steps).count) 步完成",
+                runs: todayRuns
+            ),
+            ExperimentDay(
+                id: "yesterday",
+                dateLabel: "昨天",
+                weekday: "Thu",
+                summary: "细胞换液、双酶切验证、WB 一抗孵育",
+                runs: [
+                    SampleData.runs[0],
+                    SampleData.runs[1],
+                    SampleData.runs[2]
+                ]
+            ),
+            ExperimentDay(
+                id: "week",
+                dateLabel: "周三",
+                weekday: "Wed",
+                summary: "铺板、质粒转化、SDS-PAGE 胶制备",
+                runs: [
+                    SampleData.runs[0],
+                    SampleData.runs[1]
+                ]
+            )
+        ]
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -182,29 +232,41 @@ private struct TodayView: View {
                         activeTimers: activeTimers
                     )
 
-                    if !activeTimers.isEmpty {
-                        TimerDock(activeTimers: activeTimers, stopTimer: stopTimer)
+                    Picker("今日视图", selection: $selectedMode) {
+                        ForEach(TodayMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
                     }
+                    .pickerStyle(.segmented)
 
-                    ForEach(todayRuns) { run in
-                        RunCard(
-                            run: run,
-                            completedStepIDs: completedStepIDs,
-                            activeTimer: activeTimers.first { $0.runID == run.id },
-                            toggleStep: { stepID in
-                                var next = completedStepIDs
-                                if next.contains(stepID) {
-                                    next.remove(stepID)
-                                } else {
-                                    next.insert(stepID)
-                                }
-                                completedStepIDs = next
-                            },
-                            startTimer: { startTimer(for: run) },
-                            showDataCard: { selectedDataCardRun = run },
-                            openBenchMode: { focusedRun = run },
-                            removeRun: run.id.hasPrefix("import-") ? { removeImportedRun(run.id) } : nil
-                        )
+                    switch selectedMode {
+                    case .plan:
+                        if !activeTimers.isEmpty {
+                            TimerDock(activeTimers: activeTimers, stopTimer: stopTimer)
+                        }
+
+                        ForEach(todayRuns) { run in
+                            RunCard(
+                                run: run,
+                                completedStepIDs: completedStepIDs,
+                                activeTimer: activeTimers.first { $0.runID == run.id },
+                                toggleStep: { stepID in
+                                    var next = completedStepIDs
+                                    if next.contains(stepID) {
+                                        next.remove(stepID)
+                                    } else {
+                                        next.insert(stepID)
+                                    }
+                                    completedStepIDs = next
+                                },
+                                startTimer: { startTimer(for: run) },
+                                showDataCard: { selectedDataCardRun = run },
+                                openBenchMode: { focusedRun = run },
+                                removeRun: run.id.hasPrefix("import-") ? { removeImportedRun(run.id) } : nil
+                            )
+                        }
+                    case .history:
+                        ExperimentHistoryView(days: historyDays, completedStepIDs: completedStepIDs)
                     }
                 }
                 .padding(18)
@@ -290,6 +352,96 @@ private struct TodayView: View {
             return
         }
         UserDefaults.standard.set(data, forKey: "activeLabTimers")
+    }
+
+    private func completedCount(in runs: [LabRun]) -> Int {
+        runs.flatMap(\.steps).filter { completedStepIDs.contains($0.id) }.count
+    }
+}
+
+private enum TodayMode: String, CaseIterable, Identifiable {
+    case plan
+    case history
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .plan:
+            return "今日安排"
+        case .history:
+            return "实验记录"
+        }
+    }
+}
+
+private struct ExperimentDay: Identifiable {
+    let id: String
+    let dateLabel: String
+    let weekday: String
+    let summary: String
+    let runs: [LabRun]
+}
+
+private struct ExperimentHistoryView: View {
+    let days: [ExperimentDay]
+    let completedStepIDs: Set<String>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(days) { day in
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(day.dateLabel)
+                                .font(.title3.bold())
+                            Text(day.weekday)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(width: 64, alignment: .leading)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(day.summary)
+                                .font(.subheadline.weight(.semibold))
+                            Text("\(day.runs.count) 条实验记录")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    VStack(spacing: 8) {
+                        ForEach(day.runs) { run in
+                            HStack(spacing: 10) {
+                                Text(run.timeLabel)
+                                    .font(.caption.monospacedDigit().weight(.semibold))
+                                    .frame(width: 48, alignment: .leading)
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(run.title)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("\(run.area.rawValue) · \(completedSteps(for: run))/\(run.steps.count) 步")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(10)
+                            .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                }
+                .padding(16)
+                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private func completedSteps(for run: LabRun) -> Int {
+        run.steps.filter { completedStepIDs.contains($0.id) }.count
     }
 }
 
@@ -715,6 +867,8 @@ private struct StepRow: View {
 private struct ProtocolsView: View {
     @State private var targetVolume = 50.0
     @State private var importedProtocolName: String?
+    @State private var editableProtocols = SampleData.protocols
+    @State private var selectedProtocol: LabProtocol?
     let importRun: (LabProtocol, Double) -> Void
 
     var body: some View {
@@ -722,7 +876,7 @@ private struct ProtocolsView: View {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("调用 Protocol 时输入本次用量，配方会按比例换算。")
+                        Text("选择模板后可先修改参数、成分和步骤，再导入今日安排。")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         HStack {
@@ -736,7 +890,20 @@ private struct ProtocolsView: View {
                     .padding(.vertical, 6)
                 }
 
-                ForEach(SampleData.protocols) { labProtocol in
+                Section {
+                    Button {
+                        selectedProtocol = emptyProtocol()
+                    } label: {
+                        Label("导入/新建 Protocol", systemImage: "square.and.arrow.down")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                }
+
+                ForEach(editableProtocols) { labProtocol in
                     ProtocolCard(
                         labProtocol: labProtocol,
                         targetVolume: targetVolume,
@@ -744,6 +911,9 @@ private struct ProtocolsView: View {
                         importRun: {
                             importRun(labProtocol, targetVolume)
                             importedProtocolName = labProtocol.name
+                        },
+                        editProtocol: {
+                            selectedProtocol = labProtocol
                         }
                     )
                         .listRowSeparator(.hidden)
@@ -752,7 +922,46 @@ private struct ProtocolsView: View {
             }
             .listStyle(.plain)
             .navigationTitle("Protocol")
+            .sheet(item: $selectedProtocol) { labProtocol in
+                ProtocolEditorView(
+                    labProtocol: labProtocol,
+                    targetVolume: targetVolume,
+                    saveProtocol: { updatedProtocol in
+                        upsert(updatedProtocol)
+                    },
+                    importProtocol: { updatedProtocol in
+                        upsert(updatedProtocol)
+                        importRun(updatedProtocol, targetVolume)
+                        importedProtocolName = updatedProtocol.name
+                    }
+                )
+            }
         }
+    }
+
+    private func upsert(_ labProtocol: LabProtocol) {
+        if let index = editableProtocols.firstIndex(where: { $0.id == labProtocol.id }) {
+            editableProtocols[index] = labProtocol
+        } else {
+            editableProtocols.insert(labProtocol, at: 0)
+        }
+    }
+
+    private func emptyProtocol() -> LabProtocol {
+        LabProtocol(
+            id: "custom-\(Int(Date().timeIntervalSince1970))",
+            name: "新 Protocol",
+            area: .cell,
+            baseVolume: targetVolume,
+            volumeUnit: "ml",
+            expectedDuration: "15 min",
+            ingredients: [
+                ProtocolIngredient(name: "成分 A", standardAmount: targetVolume, unit: "ml")
+            ],
+            steps: [
+                LabStep(id: UUID().uuidString, title: "第一步", detail: "填写操作条件", durationMinutes: nil, isCarryOver: false)
+            ]
+        )
     }
 }
 
@@ -761,6 +970,7 @@ private struct ProtocolCard: View {
     let targetVolume: Double
     let isRecentlyImported: Bool
     let importRun: () -> Void
+    let editProtocol: () -> Void
 
     private var scaleFactor: Double {
         targetVolume / labProtocol.baseVolume
@@ -797,23 +1007,176 @@ private struct ProtocolCard: View {
             }
 
             if isRecentlyImported {
-                Button(action: importRun) {
-                    Label("已导入今日", systemImage: "checkmark.circle.fill")
-                        .frame(maxWidth: .infinity)
+                HStack(spacing: 10) {
+                    Button(action: editProtocol) {
+                        Label("编辑", systemImage: "slider.horizontal.3")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+
+                    Button(action: importRun) {
+                        Label("已导入今日", systemImage: "checkmark.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
             } else {
-                Button(action: importRun) {
-                    Label("导入今日安排", systemImage: "calendar.badge.plus")
-                        .frame(maxWidth: .infinity)
+                HStack(spacing: 10) {
+                    Button(action: editProtocol) {
+                        Label("编辑", systemImage: "slider.horizontal.3")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+
+                    Button(action: importRun) {
+                        Label("导入今日", systemImage: "calendar.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
             }
         }
         .padding(16)
         .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct ProtocolEditorView: View {
+    @State private var draft: LabProtocol
+    let targetVolume: Double
+    let saveProtocol: (LabProtocol) -> Void
+    let importProtocol: (LabProtocol) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    init(
+        labProtocol: LabProtocol,
+        targetVolume: Double,
+        saveProtocol: @escaping (LabProtocol) -> Void,
+        importProtocol: @escaping (LabProtocol) -> Void
+    ) {
+        _draft = State(initialValue: labProtocol)
+        self.targetVolume = targetVolume
+        self.saveProtocol = saveProtocol
+        self.importProtocol = importProtocol
+    }
+
+    private var scaleFactor: Double {
+        guard draft.baseVolume > 0 else {
+            return 1
+        }
+        return targetVolume / draft.baseVolume
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("基础信息") {
+                    TextField("Protocol 名称", text: $draft.name)
+                    Picker("实验类型", selection: $draft.area) {
+                        ForEach(WorkflowArea.allCases) { area in
+                            Text(area.rawValue).tag(area)
+                        }
+                    }
+                    HStack {
+                        Text("基准体积")
+                        Spacer()
+                        TextField("0", value: $draft.baseVolume, format: .number)
+                            .multilineTextAlignment(TextAlignment.trailing)
+                            .frame(width: 90)
+                        TextField("单位", text: $draft.volumeUnit)
+                            .multilineTextAlignment(TextAlignment.trailing)
+                            .frame(width: 54)
+                    }
+                    TextField("预计时长", text: $draft.expectedDuration)
+                }
+
+                Section("成分参数") {
+                    ForEach($draft.ingredients) { $ingredient in
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("成分名称", text: $ingredient.name)
+                            HStack {
+                                TextField("基准用量", value: $ingredient.standardAmount, format: .number)
+                                TextField("单位", text: $ingredient.unit)
+                                    .frame(width: 70)
+                                Spacer()
+                                Text(ingredient.scaled(by: scaleFactor))
+                                    .font(.caption.monospacedDigit().weight(.semibold))
+                                    .foregroundStyle(.teal)
+                            }
+                        }
+                    }
+                    .onDelete { offsets in
+                        draft.ingredients.remove(atOffsets: offsets)
+                    }
+
+                    Button {
+                        draft.ingredients.append(ProtocolIngredient(name: "新成分", standardAmount: 1, unit: draft.volumeUnit))
+                    } label: {
+                        Label("增加成分", systemImage: "plus.circle")
+                    }
+                }
+
+                Section("实验步骤") {
+                    ForEach($draft.steps) { $step in
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("步骤名称", text: $step.title)
+                            TextField("操作条件", text: $step.detail)
+                            HStack {
+                                Text("计时")
+                                Spacer()
+                                Stepper(
+                                    step.durationMinutes == nil ? "无" : "\(step.durationMinutes ?? 0) min",
+                                    value: Binding(
+                                        get: { step.durationMinutes ?? 0 },
+                                        set: { step.durationMinutes = $0 == 0 ? nil : $0 }
+                                    ),
+                                    in: 0...240,
+                                    step: 5
+                                )
+                            }
+                            Toggle("顺延占位", isOn: $step.isCarryOver)
+                        }
+                    }
+                    .onDelete { offsets in
+                        draft.steps.remove(atOffsets: offsets)
+                    }
+
+                    Button {
+                        draft.steps.append(LabStep(id: UUID().uuidString, title: "新步骤", detail: "填写操作条件", durationMinutes: nil, isCarryOver: false))
+                    } label: {
+                        Label("增加步骤", systemImage: "plus.circle")
+                    }
+                }
+
+                Section {
+                    Button {
+                        importProtocol(draft)
+                        dismiss()
+                    } label: {
+                        Label("保存并导入今日安排", systemImage: "calendar.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .navigationTitle("编辑 Protocol")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        saveProtocol(draft)
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1048,6 +1411,111 @@ private struct InventoryItemCard: View {
     }
 }
 
+private struct ProfileView: View {
+    @AppStorage("profileDisplayName") private var displayName = "未登录用户"
+    @AppStorage("profileLabName") private var labName = "个人本地工作区"
+    @AppStorage("profileLargeBenchMode") private var largeBenchMode = true
+    @AppStorage("profileLocalOnly") private var localOnly = true
+    @AppStorage("profileDataCardWatermark") private var dataCardWatermark = true
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(spacing: 14) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.teal.opacity(0.18))
+                                Image(systemName: "person.fill")
+                                    .font(.title)
+                                    .foregroundStyle(.teal)
+                            }
+                            .frame(width: 62, height: 62)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(displayName)
+                                    .font(.title3.bold())
+                                Text(labName)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                Text(localOnly ? "本地个人工具" : "账号能力预留")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 5)
+                                    .background(Color.teal.opacity(0.12), in: Capsule())
+                                    .foregroundStyle(.teal)
+                            }
+                            Spacer()
+                        }
+
+                        TextField("显示名称", text: $displayName)
+                            .textFieldStyle(.roundedBorder)
+                        TextField("实验室/项目空间", text: $labName)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    .padding(16)
+                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("实验台偏好")
+                            .font(.headline)
+                        Toggle("大字号实验台模式", isOn: $largeBenchMode)
+                        Toggle("数据只保存在本机", isOn: $localOnly)
+                        Toggle("结果卡片显示 LabBuddy 水印", isOn: $dataCardWatermark)
+                    }
+                    .padding(16)
+                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("未来账号能力")
+                            .font(.headline)
+                        ProfileActionRow(icon: "person.badge.key", title: "登录与身份", subtitle: "为之后的 Pro 和云备份预留")
+                        ProfileActionRow(icon: "bell.badge", title: "通知设置", subtitle: "计时器、顺延实验和库存提醒")
+                        ProfileActionRow(icon: "icloud", title: "实验资产同步", subtitle: "v1 保持关闭，本地优先")
+                    }
+                    .padding(16)
+                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .padding(18)
+            }
+            .background(Color.labBackground)
+            .navigationTitle("我的")
+        }
+    }
+}
+
+private struct ProfileActionRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(.teal)
+                .frame(width: 34, height: 34)
+                .background(Color.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(10)
+        .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 private struct RemoveImportedRunKey: EnvironmentKey {
     static let defaultValue: (String) -> Void = { _ in }
 }
@@ -1127,19 +1595,15 @@ private struct DataCardPreview: View {
     let run: LabRun
     let completedStepIDs: Set<String>
     @Environment(\.dismiss) private var dismiss
-    @State private var reportCopied = false
 
     private var doneCount: Int {
         run.steps.filter { completedStepIDs.contains($0.id) }.count
     }
 
-    private var reportText: String {
-        "老师好，我刚完成了\(run.title)。Protocol：\(run.protocolName)；规模：\(run.scaledVolumeLabel)；步骤完成：\(doneCount)/\(run.steps.count)。关键条件和结果图已整理在 LabBuddy 卡片中。"
-    }
-
     var body: some View {
         NavigationStack {
-            VStack(spacing: 18) {
+            ScrollView {
+                VStack(spacing: 18) {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
@@ -1155,14 +1619,24 @@ private struct DataCardPreview: View {
                     }
 
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(LinearGradient(colors: [.teal.opacity(0.28), .blue.opacity(0.18)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(height: 170)
+                        .fill(LinearGradient(colors: [.teal.opacity(0.26), .cyan.opacity(0.14), .indigo.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(height: 220)
                         .overlay {
-                            VStack(spacing: 8) {
-                                Image(systemName: "photo.badge.checkmark")
-                                    .font(.system(size: 42))
-                                Text("实验图片占位")
+                            VStack(spacing: 12) {
+                                HStack(spacing: 10) {
+                                    ForEach(0..<5) { index in
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .fill(index == 2 ? Color.teal.opacity(0.72) : Color.primary.opacity(0.22))
+                                            .frame(width: 18, height: CGFloat(46 + index * 17))
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 120)
+
+                                Text("结果图 / 标注区")
                                     .font(.headline)
+                                Text("拍照后可替换为跑胶、WB 或细胞图片")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                             .foregroundStyle(.teal)
                         }
@@ -1170,9 +1644,32 @@ private struct DataCardPreview: View {
                     VStack(alignment: .leading, spacing: 10) {
                         MetadataRow(label: "Protocol", value: run.protocolName)
                         MetadataRow(label: "用量/规模", value: run.scaledVolumeLabel)
+                        MetadataRow(label: "实验类型", value: run.area.rawValue)
                         MetadataRow(label: "步骤完成", value: "\(doneCount)/\(run.steps.count)")
                         MetadataRow(label: "生成时间", value: Date.now.formatted(date: .abbreviated, time: .shortened))
                     }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("关键实验条件")
+                            .font(.headline)
+                        ForEach(run.steps.prefix(4)) { step in
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: step.durationMinutes == nil ? "checkmark.circle" : "timer")
+                                    .foregroundStyle(step.durationMinutes == nil ? .teal : .blue)
+                                    .frame(width: 20)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(step.title)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(conditionText(for: step))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                    .padding(14)
+                    .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
 
                     Text("Powered by LabBuddy")
                         .font(.caption2.weight(.semibold))
@@ -1182,31 +1679,17 @@ private struct DataCardPreview: View {
                 .padding(18)
                 .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("汇报摘要")
-                        .font(.headline)
-                    Text(reportText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
-
                 Button {
-                    Clipboard.copy(reportText)
-                    reportCopied = true
+                    Clipboard.copy("\(run.title) · \(run.protocolName) · \(run.scaledVolumeLabel)")
                 } label: {
-                    Label(reportCopied ? "已复制汇报摘要" : "复制汇报摘要", systemImage: reportCopied ? "checkmark.circle.fill" : "doc.on.doc")
+                    Label("复制实验条件", systemImage: "doc.on.doc")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-
-                Spacer()
+                }
+                .padding(18)
             }
-            .padding(18)
             .background(Color.labBackground)
             .navigationTitle("结果卡片")
             .toolbar {
@@ -1217,6 +1700,13 @@ private struct DataCardPreview: View {
                 }
             }
         }
+    }
+
+    private func conditionText(for step: LabStep) -> String {
+        if let duration = step.durationMinutes {
+            return "\(step.detail) · \(duration) min"
+        }
+        return step.detail
     }
 }
 

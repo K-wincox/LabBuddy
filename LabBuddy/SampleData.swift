@@ -57,6 +57,11 @@ enum SampleData {
                 ProtocolIngredient(name: "DMEM high glucose", standardAmount: 180, unit: "ml"),
                 ProtocolIngredient(name: "FBS", standardAmount: 20, unit: "ml"),
                 ProtocolIngredient(name: "Pen/Strep", standardAmount: 2, unit: "ml")
+            ],
+            steps: [
+                LabStep(id: "medium-warm", title: "预温基础培养基", detail: "37 C 水浴，使用前确认无沉淀", durationMinutes: 8, isCarryOver: false),
+                LabStep(id: "medium-mix", title: "加入血清与双抗", detail: "按比例加入后轻柔颠倒混匀", durationMinutes: nil, isCarryOver: false),
+                LabStep(id: "medium-label", title: "标记批次", detail: "写明日期、配方与操作者", durationMinutes: nil, isCarryOver: false)
             ]
         ),
         LabProtocol(
@@ -72,6 +77,11 @@ enum SampleData {
                 ProtocolIngredient(name: "10x Ligase buffer", standardAmount: 2, unit: "ul"),
                 ProtocolIngredient(name: "T4 Ligase", standardAmount: 1, unit: "ul"),
                 ProtocolIngredient(name: "ddH2O", standardAmount: 9, unit: "ul")
+            ],
+            steps: [
+                LabStep(id: "ligation-thaw", title: "冰上融化组分", detail: "buffer 完全融化后短暂离心", durationMinutes: nil, isCarryOver: false),
+                LabStep(id: "ligation-mix", title: "配置连接体系", detail: "酶最后加入，轻柔混匀", durationMinutes: nil, isCarryOver: false),
+                LabStep(id: "ligation-incubate", title: "连接孵育", detail: "16 C 或室温按策略孵育", durationMinutes: 25, isCarryOver: false)
             ]
         ),
         LabProtocol(
@@ -87,6 +97,11 @@ enum SampleData {
                 ProtocolIngredient(name: "10% SDS", standardAmount: 0.1, unit: "ml"),
                 ProtocolIngredient(name: "ddH2O", standardAmount: 4.0, unit: "ml"),
                 ProtocolIngredient(name: "APS/TEMED", standardAmount: 0.1, unit: "ml")
+            ],
+            steps: [
+                LabStep(id: "gel-clean", title: "清洁玻璃板", detail: "确认无漏液、无残胶", durationMinutes: nil, isCarryOver: false),
+                LabStep(id: "gel-pour", title: "灌制分离胶", detail: "APS/TEMED 最后加入后立即灌胶", durationMinutes: nil, isCarryOver: false),
+                LabStep(id: "gel-polymerize", title: "聚合等待", detail: "异丙醇压平胶面", durationMinutes: 30, isCarryOver: false)
             ]
         )
     ]

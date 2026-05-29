@@ -10,10 +10,10 @@ enum WorkflowArea: String, CaseIterable, Identifiable, Codable {
 
 struct LabStep: Identifiable, Hashable, Codable {
     let id: String
-    let title: String
-    let detail: String
-    let durationMinutes: Int?
-    let isCarryOver: Bool
+    var title: String
+    var detail: String
+    var durationMinutes: Int?
+    var isCarryOver: Bool
 }
 
 struct LabRun: Identifiable, Hashable, Codable {
@@ -58,11 +58,18 @@ struct InventoryItem: Identifiable, Codable, Hashable {
     }
 }
 
-struct ProtocolIngredient: Identifiable, Hashable {
-    let id = UUID()
-    let name: String
-    let standardAmount: Double
-    let unit: String
+struct ProtocolIngredient: Identifiable, Hashable, Codable {
+    let id: String
+    var name: String
+    var standardAmount: Double
+    var unit: String
+
+    init(id: String = UUID().uuidString, name: String, standardAmount: Double, unit: String) {
+        self.id = id
+        self.name = name
+        self.standardAmount = standardAmount
+        self.unit = unit
+    }
 
     func scaled(by factor: Double) -> String {
         let amount = standardAmount * factor
@@ -71,14 +78,15 @@ struct ProtocolIngredient: Identifiable, Hashable {
     }
 }
 
-struct LabProtocol: Identifiable, Hashable {
+struct LabProtocol: Identifiable, Hashable, Codable {
     let id: String
-    let name: String
-    let area: WorkflowArea
-    let baseVolume: Double
-    let volumeUnit: String
-    let expectedDuration: String
-    let ingredients: [ProtocolIngredient]
+    var name: String
+    var area: WorkflowArea
+    var baseVolume: Double
+    var volumeUnit: String
+    var expectedDuration: String
+    var ingredients: [ProtocolIngredient]
+    var steps: [LabStep]
 }
 
 struct CalculatorExample: Identifiable, Hashable {

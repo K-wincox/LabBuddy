@@ -22,8 +22,8 @@ See: .planning/PROJECT.md (updated 2026-05-28)
 
 Phase: 1 of 8 (iOS Local Foundation)
 Plan: 3 of 3 in current phase
-Status: Phase 1 implementation complete; awaiting Xcode runtime verification
-Last activity: 2026-05-28 — Added Makefile shortcuts for local preflight, packaging, and opening the Xcode project.
+Status: Phase 1 implementation verified with Xcode; v1 prototype refinements in progress via quick tasks
+Last activity: 2026-05-29 — Added profile tab, Today history switch, editable Protocol flow, and simplified Data Card; verified with XcodeBuildMCP simulator run.
 
 Progress: [█░░░░░░░░░] 11%
 
@@ -54,14 +54,12 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Install full Xcode and run `xcodebuild` or launch the simulator for runtime verification.
-- After installing Xcode, run `./scripts/check-ios-local.sh`.
-- After runtime verification, mark Phase 1 complete and move to Phase 2 Protocol Library.
 - Replace the current `UserDefaults` prototype persistence with a structured local store when Phase 2/3 data editing begins.
+- Promote editable Protocols and experiment history from prototype state into structured local persistence in Phase 2/3.
 
 ### Blockers/Concerns
 
-- Full iOS build verification is blocked until Xcode is installed. Current machine has Command Line Tools only; `xcodebuild` is unavailable.
+- None currently blocking local simulator verification. Xcode 26.5 and XcodeBuildMCP are available.
 
 ## Deferred Items
 
@@ -74,6 +72,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-28
-Stopped at: Phase 1 implementation complete in code with local preflight script; next step is install full Xcode and run `./scripts/check-ios-local.sh`.
+Last session: 2026-05-29
+Stopped at: LabBuddy prototype refinements compiled and launched in iOS Simulator through XcodeBuildMCP.
 Resume file: None
