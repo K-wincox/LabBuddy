@@ -1313,15 +1313,12 @@ private struct ProtocolsView: View {
     @State private var sharedProtocolName: String?
 
     var body: some View {
-        NavigationStack {
+        ZStack {
+            Color.labBackground.ignoresSafeArea()
+
             List {
                 Section {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("方法资产库")
-                            .font(.headline)
-                        Text("管理模板、公式变量、步骤参数和来源；排期请回到今日页的空白时间添加。")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("目标体积")
                             Spacer()
@@ -1379,32 +1376,31 @@ private struct ProtocolsView: View {
                 }
             }
             .listStyle(.plain)
-            .navigationTitle("")
-            .sheet(item: $selectedProtocol) { labProtocol in
-                ProtocolEditorView(
-                    labProtocol: labProtocol,
-                    targetVolume: targetVolume,
-                    saveProtocol: { updatedProtocol in
-                        upsert(updatedProtocol)
-                    }
-                )
-            }
-            .sheet(item: $extractionSource) { sourceType in
-                ProtocolExtractionView(sourceType: sourceType) { extracted in
-                    upsert(extracted)
-                    selectedProtocol = extracted
+        }
+        .sheet(item: $selectedProtocol) { labProtocol in
+            ProtocolEditorView(
+                labProtocol: labProtocol,
+                targetVolume: targetVolume,
+                saveProtocol: { updatedProtocol in
+                    upsert(updatedProtocol)
                 }
+            )
+        }
+        .sheet(item: $extractionSource) { sourceType in
+            ProtocolExtractionView(sourceType: sourceType) { extracted in
+                upsert(extracted)
+                selectedProtocol = extracted
             }
-            .alert("Protocol 已准备分享", isPresented: Binding(
-                get: { sharedProtocolName != nil },
-                set: { if !$0 { sharedProtocolName = nil } }
-            )) {
-                Button("完成", role: .cancel) {
-                    sharedProtocolName = nil
-                }
-            } message: {
-                Text(sharedProtocolName ?? "")
+        }
+        .alert("Protocol 已准备分享", isPresented: Binding(
+            get: { sharedProtocolName != nil },
+            set: { if !$0 { sharedProtocolName = nil } }
+        )) {
+            Button("完成", role: .cancel) {
+                sharedProtocolName = nil
             }
+        } message: {
+            Text(sharedProtocolName ?? "")
         }
     }
 
@@ -1899,7 +1895,9 @@ private struct ToolsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        ZStack {
+            Color.labBackground.ignoresSafeArea()
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     Picker("计算模式", selection: $selectedCalculator) {
@@ -1963,8 +1961,6 @@ private struct ToolsView: View {
                 }
                 .padding(18)
             }
-            .background(Color.labBackground)
-            .navigationTitle("计算工具")
         }
     }
 }
@@ -2090,7 +2086,9 @@ private struct ProfileView: View {
     @AppStorage("profileDataCardWatermark") private var dataCardWatermark = true
 
     var body: some View {
-        NavigationStack {
+        ZStack {
+            Color.labBackground.ignoresSafeArea()
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 14) {
@@ -2155,8 +2153,6 @@ private struct ProfileView: View {
                 }
                 .padding(18)
             }
-            .background(Color.labBackground)
-            .navigationTitle("我的")
         }
     }
 }
