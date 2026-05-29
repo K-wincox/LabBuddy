@@ -8,11 +8,13 @@ import AppKit
 struct ContentView: View {
     @State private var importedRuns: [LabRun] = []
     @State private var tomorrowRuns: [LabRun] = []
+    @State private var pastDays: [ExperimentDayRecord] = SampleData.pastDays
     @State private var inventoryItems: [InventoryItem] = SampleData.inventory
+    @AppStorage("lastLabBuddyOpenDate") private var lastOpenDate = ""
 
     var body: some View {
         TabView {
-            TodayView(importedRuns: importedRuns)
+            TodayView(importedRuns: importedRuns, pastDays: pastDays)
                 .environment(\.removeImportedRun, { runID in
                     importedRuns.removeAll { $0.id == runID }
                     tomorrowRuns.removeAll { $0.id == runID }
@@ -52,13 +54,18 @@ struct ContentView: View {
         .onAppear {
             loadImportedRuns()
             loadTomorrowRuns()
+            loadPastDays()
             loadInventoryItems()
+            rollScheduleIfNeeded()
         }
         .onChange(of: importedRuns) {
             saveImportedRuns(importedRuns)
         }
         .onChange(of: tomorrowRuns) {
             saveTomorrowRuns(tomorrowRuns)
+        }
+        .onChange(of: pastDays) {
+            savePastDays(pastDays)
         }
         .onChange(of: inventoryItems) {
             saveInventoryItems(inventoryItems)
@@ -146,11 +153,26 @@ struct ContentView: View {
         tomorrowRuns = runs
     }
 
+    private func loadPastDays() {
+        guard let data = UserDefaults.standard.data(forKey: "pastExperimentDays"),
+              let days = try? JSONDecoder().decode([ExperimentDayRecord].self, from: data) else {
+            return
+        }
+        pastDays = days
+    }
+
     private func saveTomorrowRuns(_ runs: [LabRun]) {
         guard let data = try? JSONEncoder().encode(runs) else {
             return
         }
         UserDefaults.standard.set(data, forKey: "tomorrowLabRuns")
+    }
+
+    private func savePastDays(_ days: [ExperimentDayRecord]) {
+        guard let data = try? JSONEncoder().encode(days) else {
+            return
+        }
+        UserDefaults.standard.set(data, forKey: "pastExperimentDays")
     }
 
     private func loadInventoryItems() {
@@ -175,7 +197,82 @@ struct ContentView: View {
         UserDefaults.standard.removeObject(forKey: "activeLabTimers")
         UserDefaults.standard.removeObject(forKey: "importedLabRuns")
         UserDefaults.standard.removeObject(forKey: "tomorrowLabRuns")
+        UserDefaults.standard.removeObject(forKey: "pastExperimentDays")
         UserDefaults.standard.removeObject(forKey: "inventoryItems")
+        UserDefaults.standard.removeObject(forKey: "lastLabBuddyOpenDate")
+    }
+
+    private func rollScheduleIfNeeded() {
+        let todayKey = Self.dayKey(for: Date())
+        defer {
+            lastOpenDate = todayKey
+        }
+
+        guard !lastOpenDate.isEmpty, lastOpenDate != todayKey else {
+            if lastOpenDate.isEmpty {
+                lastOpenDate = todayKey
+            }
+            return
+        }
+
+        let todaysRuns = (importedRuns + SampleData.runs).sortedByTimeLabel()
+        if !todaysRuns.isEmpty {
+            let archive = ExperimentDayRecord(
+                id: "past-\(lastOpenDate)",
+                dateLabel: Self.displayDateLabel(from: lastOpenDate),
+                weekday: Self.weekdayLabel(from: lastOpenDate),
+                summary: "\(todaysRuns.count) 个实验 · 已归档",
+                runs: todaysRuns
+            )
+            pastDays.removeAll { $0.id == archive.id }
+            pastDays.insert(archive, at: 0)
+        }
+
+        importedRuns = tomorrowRuns.map { run in
+            LabRun(
+                id: run.id,
+                title: run.title,
+                area: run.area,
+                timeLabel: run.timeLabel,
+                status: "已排期",
+                protocolName: run.protocolName,
+                scaledVolumeLabel: run.scaledVolumeLabel,
+                steps: run.steps
+            )
+        }
+        tomorrowRuns = []
+    }
+
+    private static func dayKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private static func displayDateLabel(from dayKey: String) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: dayKey) else {
+            return dayKey
+        }
+        formatter.dateFormat = "M月d日"
+        return formatter.string(from: date)
+    }
+
+    private static func weekdayLabel(from dayKey: String) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: dayKey) else {
+            return ""
+        }
+        formatter.dateFormat = "EEE"
+        return formatter.string(from: date)
     }
 
     private func estimatedMinutes(from text: String) -> Int? {
@@ -198,6 +295,7 @@ private enum PlanTargetDay: String {
 
 private struct TodayView: View {
     let importedRuns: [LabRun]
+    let pastDays: [ExperimentDayRecord]
     @Environment(\.removeImportedRun) private var removeImportedRun
     @Environment(\.tomorrowRuns) private var tomorrowRuns
     @Environment(\.scheduleProtocolRun) private var scheduleProtocolRun
@@ -207,7 +305,7 @@ private struct TodayView: View {
     @State private var focusedRun: LabRun?
     @State private var selectedMode: TodayMode = .records
     @State private var calendarScale = 0.72
-    @State private var selectedRecordDayID = "today"
+    @State private var selectedRecordDayID = SampleData.pastDays.first?.id ?? "past-yesterday"
     @State private var scheduleRequest: ScheduleRequest?
 
     private var completedStepIDs: Set<String> {
@@ -216,7 +314,7 @@ private struct TodayView: View {
     }
 
     private var todayRuns: [LabRun] {
-        importedRuns + SampleData.runs
+        (importedRuns + SampleData.runs).sortedByTimeLabel()
     }
 
     private var timerPointCount: Int {
@@ -227,48 +325,14 @@ private struct TodayView: View {
         todayRuns.flatMap(\.steps).filter(\.isCarryOver).count
     }
 
-    private var historyDays: [ExperimentDay] {
-        [
-            ExperimentDay(
-                id: "tomorrow",
-                dateLabel: "明天",
-                weekday: "Sat",
-                summary: tomorrowRuns.isEmpty ? "暂无计划，从 Protocol 导入后会出现在这里" : "\(tomorrowRuns.count) 个明日实验计划",
-                runs: tomorrowRuns
-            ),
-            ExperimentDay(
-                id: "today",
-                dateLabel: "今天",
-                weekday: "Fri",
-                summary: "\(todayRuns.count) 个实验 · \(completedCount(in: todayRuns))/\(todayRuns.flatMap(\.steps).count) 步完成",
-                runs: todayRuns
-            ),
-            ExperimentDay(
-                id: "yesterday",
-                dateLabel: "昨天",
-                weekday: "Thu",
-                summary: "细胞换液、双酶切验证、WB 一抗孵育",
-                runs: [
-                    SampleData.runs[0],
-                    SampleData.runs[1],
-                    SampleData.runs[2]
-                ]
-            ),
-            ExperimentDay(
-                id: "week",
-                dateLabel: "周三",
-                weekday: "Wed",
-                summary: "铺板、质粒转化、SDS-PAGE 胶制备",
-                runs: [
-                    SampleData.runs[0],
-                    SampleData.runs[1]
-                ]
-            )
-        ]
+    private var historyDays: [ExperimentDayRecord] {
+        pastDays
     }
 
-    private var selectedRecordDay: ExperimentDay {
-        historyDays.first { $0.id == selectedRecordDayID } ?? historyDays.first { $0.id == "today" } ?? historyDays[0]
+    private var selectedRecordDay: ExperimentDayRecord {
+        historyDays.first { $0.id == selectedRecordDayID }
+            ?? historyDays.first
+            ?? ExperimentDayRecord(id: "past-empty", dateLabel: "过去", weekday: "", summary: "还没有归档记录", runs: [])
     }
 
     var body: some View {
@@ -294,45 +358,37 @@ private struct TodayView: View {
                         ExperimentDayDetailView(
                             day: selectedRecordDay,
                             completedStepIDs: completedStepIDs,
-                            emptyTitle: selectedRecordDay.id == "tomorrow" ? "明天还没有计划" : "这一天还没有实验记录",
-                            emptySubtitle: selectedRecordDay.id == "tomorrow" ? "在 Protocol 中编辑模板后导入明天。" : "完成实验后会在这里沉淀成记录。"
+                            emptyTitle: "这一天还没有实验记录",
+                            emptySubtitle: "超过 00:00 后，今天完成或计划过的实验会进入这里。"
                         )
                     case .today:
-                        TimelineScheduleStrip(
-                            title: "今天的空白时间",
-                            slots: ["08:30", "11:00", "15:00", "18:30"],
-                            action: { timeLabel in
-                                scheduleRequest = ScheduleRequest(targetDay: .today, timeLabel: timeLabel)
-                            }
-                        )
-
                         if !activeTimers.isEmpty {
                             TimerDock(activeTimers: activeTimers, stopTimer: stopTimer)
                         }
 
-                        ForEach(todayRuns) { run in
-                            RunCard(
-                                run: run,
-                                completedStepIDs: completedStepIDs,
-                                activeTimer: activeTimers.first { $0.runID == run.id },
-                                toggleStep: { stepID in
-                                    var next = completedStepIDs
-                                    if next.contains(stepID) {
-                                        next.remove(stepID)
-                                    } else {
-                                        next.insert(stepID)
-                                    }
-                                    completedStepIDs = next
-                                },
-                                startTimer: { startTimer(for: run) },
-                                showDataCard: { selectedDataCardRun = run },
-                                openBenchMode: { focusedRun = run },
-                                removeRun: run.id.hasPrefix("import-") ? { removeImportedRun(run.id) } : nil
-                            )
-                        }
+                        EditableScheduleTimelineView(
+                            title: "今天计划",
+                            subtitle: "\(todayRuns.count) 个实验 · 可在任意时间节点插入",
+                            emptyTitle: "今天还没有实验",
+                            emptySubtitle: "从 09:00 开始新建第一个实验。",
+                            targetDay: .today,
+                            runs: todayRuns,
+                            completedStepIDs: completedStepIDs,
+                            activeTimers: activeTimers,
+                            addAtTime: { timeLabel in
+                                scheduleRequest = ScheduleRequest(targetDay: .today, timeLabel: timeLabel)
+                            },
+                            toggleStep: toggleStepCompletion,
+                            startTimer: { run in startTimer(for: run) },
+                            showDataCard: { selectedDataCardRun = $0 },
+                            openBenchMode: { focusedRun = $0 },
+                            removeRun: { run in
+                                run.id.hasPrefix("import-") ? removeImportedRun(run.id) : nil
+                            }
+                        )
                     case .tomorrow:
                         TomorrowPlanView(
-                            runs: tomorrowRuns,
+                            runs: tomorrowRuns.sortedByTimeLabel(),
                             completedStepIDs: completedStepIDs,
                             removeRun: { runID in
                                 removeImportedRun(runID)
@@ -412,6 +468,16 @@ private struct TodayView: View {
         activeTimers.removeAll { $0.id == timer.id }
     }
 
+    private func toggleStepCompletion(_ stepID: String) {
+        var next = completedStepIDs
+        if next.contains(stepID) {
+            next.remove(stepID)
+        } else {
+            next.insert(stepID)
+        }
+        completedStepIDs = next
+    }
+
     private func markRunComplete(_ run: LabRun) {
         var next = completedStepIDs
         run.steps.forEach { next.insert($0.id) }
@@ -456,7 +522,7 @@ private enum TodayMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .records:
-            return "实验记录"
+            return "过去"
         case .today:
             return "今天"
         case .tomorrow:
@@ -465,16 +531,8 @@ private enum TodayMode: String, CaseIterable, Identifiable {
     }
 }
 
-private struct ExperimentDay: Identifiable {
-    let id: String
-    let dateLabel: String
-    let weekday: String
-    let summary: String
-    let runs: [LabRun]
-}
-
 private struct ExperimentCalendarView: View {
-    let days: [ExperimentDay]
+    let days: [ExperimentDayRecord]
     @Binding var selectedDayID: String
     @Binding var scale: Double
 
@@ -482,9 +540,9 @@ private struct ExperimentCalendarView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("实验记录")
+                    Text("过去")
                         .font(.title2.bold())
-                    Text("按天回看实验，也可以放大缩小查看密度")
+                    Text("切换不同日期，回看当天做过的实验")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -526,7 +584,7 @@ private struct ExperimentCalendarView: View {
 }
 
 private struct CalendarDayCell: View {
-    let day: ExperimentDay
+    let day: ExperimentDayRecord
     let isSelected: Bool
     let scale: Double
     let select: () -> Void
@@ -582,7 +640,7 @@ private struct CalendarDayCell: View {
 }
 
 private struct ExperimentDayDetailView: View {
-    let day: ExperimentDay
+    let day: ExperimentDayRecord
     let completedStepIDs: Set<String>
     let emptyTitle: String
     let emptySubtitle: String
@@ -858,37 +916,135 @@ private struct RunCard: View {
     }
 }
 
-private struct TimelineScheduleStrip: View {
+private struct EditableScheduleTimelineView: View {
     let title: String
-    let slots: [String]
-    let action: (String) -> Void
+    let subtitle: String
+    let emptyTitle: String
+    let emptySubtitle: String
+    let targetDay: PlanTargetDay
+    let runs: [LabRun]
+    let completedStepIDs: Set<String>
+    let activeTimers: [ActiveLabTimer]
+    let addAtTime: (String) -> Void
+    let toggleStep: (String) -> Void
+    let startTimer: (LabRun) -> Void
+    let showDataCard: (LabRun) -> Void
+    let openBenchMode: (LabRun) -> Void
+    let removeRun: (LabRun) -> Void
+
+    private var sortedRuns: [LabRun] {
+        runs.sortedByTimeLabel()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.headline)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(slots, id: \.self) { slot in
-                        Button {
-                            action(slot)
-                        } label: {
-                            VStack(spacing: 6) {
-                                Text(slot)
-                                    .font(.headline.monospacedDigit())
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.title3)
-                            }
-                            .frame(width: 88, height: 72)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.title2.bold())
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
+            TimelineInsertButton(timeLabel: suggestedTime(before: sortedRuns.first, after: nil), title: runs.isEmpty ? "新建第一个实验" : "在最前面新建") {
+                addAtTime(suggestedTime(before: sortedRuns.first, after: nil))
+            }
+
+            if sortedRuns.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Image(systemName: "calendar.badge.plus")
+                        .font(.title2)
+                        .foregroundStyle(.teal)
+                    Text(emptyTitle)
+                        .font(.headline)
+                    Text(emptySubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+            } else {
+                ForEach(Array(sortedRuns.enumerated()), id: \.element.id) { index, run in
+                    RunCard(
+                        run: run,
+                        completedStepIDs: completedStepIDs,
+                        activeTimer: activeTimers.first { $0.runID == run.id },
+                        toggleStep: { stepID in toggleStep(stepID) },
+                        startTimer: { startTimer(run) },
+                        showDataCard: { showDataCard(run) },
+                        openBenchMode: { openBenchMode(run) },
+                        removeRun: run.id.hasPrefix("import-") ? { removeRun(run) } : nil
+                    )
+
+                    TimelineInsertButton(
+                        timeLabel: suggestedTime(before: sortedRuns[safe: index + 1], after: run),
+                        title: index == sortedRuns.count - 1 ? "在后面新建" : "在两个实验之间新建"
+                    ) {
+                        addAtTime(suggestedTime(before: sortedRuns[safe: index + 1], after: run))
                     }
                 }
             }
         }
-        .padding(16)
-        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func suggestedTime(before nextRun: LabRun?, after previousRun: LabRun?) -> String {
+        if let previousRun, let previous = Self.minutes(from: previousRun.timeLabel) {
+            if let nextRun, let next = Self.minutes(from: nextRun.timeLabel), next > previous {
+                return Self.timeLabel(from: previous + max(15, (next - previous) / 2))
+            }
+            return Self.timeLabel(from: min(previous + 60, 23 * 60 + 30))
+        }
+
+        if let nextRun, let next = Self.minutes(from: nextRun.timeLabel) {
+            return Self.timeLabel(from: max(next - 60, 7 * 60))
+        }
+
+        return targetDay == .today ? "09:00" : "09:30"
+    }
+
+    private static func minutes(from timeLabel: String) -> Int? {
+        let parts = timeLabel.split(separator: ":")
+        guard parts.count == 2,
+              let hour = Int(parts[0]),
+              let minute = Int(parts[1]) else {
+            return nil
+        }
+        return hour * 60 + minute
+    }
+
+    private static func timeLabel(from minutes: Int) -> String {
+        let clamped = min(max(minutes, 0), 23 * 60 + 59)
+        return String(format: "%02d:%02d", clamped / 60, clamped % 60)
+    }
+}
+
+private struct TimelineInsertButton: View {
+    let timeLabel: String
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.teal)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                    Text(timeLabel)
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(12)
+            .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -910,7 +1066,7 @@ private struct ProtocolScheduleSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("空白时间") {
+                Section("插入位置") {
                     Label(destinationTitle, systemImage: "calendar.badge.plus")
                         .font(.headline)
                 }
@@ -970,125 +1126,22 @@ private struct TomorrowPlanView: View {
     let addAtTime: (String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            TimelineScheduleStrip(
-                title: "明天的空白时间",
-                slots: ["09:00", "10:30", "14:00", "16:30", "20:00"],
-                action: addAtTime
-            )
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("明天计划")
-                            .font(.title2.bold())
-                        Text(runs.isEmpty ? "从 Protocol 导入明天要做的实验" : "\(runs.count) 个实验已安排")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "calendar.badge.clock")
-                        .font(.title2)
-                        .foregroundStyle(.teal)
-                }
-            }
-            .padding(16)
-            .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
-
-            if runs.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: "list.clipboard")
-                        .font(.title2)
-                        .foregroundStyle(.teal)
-                    Text("还没有明日实验")
-                        .font(.headline)
-                    Text("去 Protocol 里选择模板，修改参数后导入，计划会自动出现在这里。")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
-            } else {
-                ForEach(runs) { run in
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .top, spacing: 12) {
-                            Text(run.timeLabel)
-                                .font(.headline.monospacedDigit())
-                                .foregroundStyle(.teal)
-                                .frame(width: 58, alignment: .leading)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(run.title)
-                                    .font(.headline)
-                                Text("\(run.area.rawValue) · \(run.protocolName)")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                Text(run.scaledVolumeLabel)
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-                        }
-
-                        ForEach(run.steps.prefix(3)) { step in
-                            TomorrowStepPreview(step: step)
-                        }
-
-                        HStack(spacing: 10) {
-                            Button {
-                                showDataCard(run)
-                            } label: {
-                                Label("预览卡片", systemImage: "rectangle.on.rectangle")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.large)
-
-                            Button(role: .destructive) {
-                                removeRun(run.id)
-                            } label: {
-                                Image(systemName: "trash")
-                                    .frame(width: 44, height: 28)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.large)
-                            .accessibilityLabel("移除明天计划")
-                        }
-                    }
-                    .padding(16)
-                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
-                }
-            }
-        }
-    }
-}
-
-private struct TomorrowStepPreview: View {
-    let step: LabStep
-
-    private var iconName: String {
-        step.durationMinutes == nil ? "circle" : "timer"
-    }
-
-    private var iconColor: Color {
-        step.durationMinutes == nil ? .secondary : .blue
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: iconName)
-                .foregroundStyle(iconColor)
-            Text(step.title)
-                .font(.caption.weight(.semibold))
-            Spacer()
-            if let duration = step.durationMinutes {
-                Text("\(duration)m")
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
+        EditableScheduleTimelineView(
+            title: "明天计划",
+            subtitle: runs.isEmpty ? "为明天安排任意时间点的实验" : "\(runs.count) 个实验已安排 · 可继续插入",
+            emptyTitle: "还没有明日实验",
+            emptySubtitle: "从 09:30 开始新建第一个实验。",
+            targetDay: .tomorrow,
+            runs: runs,
+            completedStepIDs: completedStepIDs,
+            activeTimers: [],
+            addAtTime: addAtTime,
+            toggleStep: { _ in },
+            startTimer: { _ in },
+            showDataCard: showDataCard,
+            openBenchMode: { _ in },
+            removeRun: { run in removeRun(run.id) }
+        )
     }
 }
 
@@ -2484,6 +2537,30 @@ private func defaultRestock(for unit: String) -> Double {
         return 1
     default:
         return 50
+    }
+}
+
+private extension Array where Element == LabRun {
+    func sortedByTimeLabel() -> [LabRun] {
+        sorted { lhs, rhs in
+            Self.minutes(from: lhs.timeLabel) < Self.minutes(from: rhs.timeLabel)
+        }
+    }
+
+    private static func minutes(from timeLabel: String) -> Int {
+        let parts = timeLabel.split(separator: ":")
+        guard parts.count == 2,
+              let hour = Int(parts[0]),
+              let minute = Int(parts[1]) else {
+            return Int.max
+        }
+        return hour * 60 + minute
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 

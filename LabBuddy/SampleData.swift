@@ -45,6 +45,39 @@ enum SampleData {
         )
     ]
 
+    static let pastDays: [ExperimentDayRecord] = [
+        ExperimentDayRecord(
+            id: "past-yesterday",
+            dateLabel: "昨天",
+            weekday: "Thu",
+            summary: "3 个实验 · 细胞换液、双酶切验证、WB 一抗孵育",
+            runs: [
+                runs[0],
+                runs[1],
+                runs[2]
+            ]
+        ),
+        ExperimentDayRecord(
+            id: "past-wednesday",
+            dateLabel: "周三",
+            weekday: "Wed",
+            summary: "2 个实验 · 铺板、SDS-PAGE 胶制备",
+            runs: [
+                runs[0],
+                runs[2]
+            ]
+        ),
+        ExperimentDayRecord(
+            id: "past-tuesday",
+            dateLabel: "周二",
+            weekday: "Tue",
+            summary: "1 个实验 · 质粒小提复核",
+            runs: [
+                runs[1]
+            ]
+        )
+    ]
+
     static let protocols: [LabProtocol] = [
         LabProtocol(
             id: "complete-medium",

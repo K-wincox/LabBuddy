@@ -44,6 +44,14 @@ struct LabRun: Identifiable, Hashable, Codable {
     let steps: [LabStep]
 }
 
+struct ExperimentDayRecord: Identifiable, Hashable, Codable {
+    let id: String
+    let dateLabel: String
+    let weekday: String
+    let summary: String
+    let runs: [LabRun]
+}
+
 struct ActiveLabTimer: Identifiable, Codable, Equatable {
     let id: String
     let runID: String
