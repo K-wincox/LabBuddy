@@ -272,7 +272,9 @@ private struct TodayView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        ZStack {
+            Color.labBackground.ignoresSafeArea()
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Picker("今日视图", selection: $selectedMode) {
@@ -344,8 +346,6 @@ private struct TodayView: View {
                 }
                 .padding(18)
             }
-            .background(Color.labBackground)
-            .navigationTitle("今日")
             .sheet(item: $selectedDataCardRun) { run in
                 DataCardPreview(run: run, completedStepIDs: completedStepIDs)
             }
