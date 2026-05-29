@@ -229,8 +229,7 @@ private struct TodayView: View {
     @State private var selectedDataCardRun: LabRun?
     @State private var focusedRun: LabRun?
     @State private var selectedMode: TodayMode = .today
-    @State private var calendarScale = 0.72
-    @State private var selectedRecordDayID = SampleData.pastDays.first?.id ?? "past-yesterday"
+    @State private var selectedRecordDayID = SampleData.pastDays.first?.id ?? ""
     @State private var scheduleRequest: ScheduleRequest?
     @State private var showEndDayConfirm = false
 
@@ -268,8 +267,7 @@ private struct TodayView: View {
                     case .past:
                         ExperimentCalendarView(
                             days: historyDays,
-                            selectedDayID: $selectedRecordDayID,
-                            scale: $calendarScale
+                            selectedDayID: $selectedRecordDayID
                         )
                         ExperimentDayDetailView(day: selectedRecordDay, completedStepIDs: completedStepIDs)
 
@@ -599,77 +597,255 @@ private enum TodayMode: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - Calendar View
+// MARK: - Monthly Calendar Grid
 
 private struct ExperimentCalendarView: View {
     let days: [ExperimentDayRecord]
     @Binding var selectedDayID: String
-    @Binding var scale: Double
+
+    @State private var displayMonth: Date = {
+        Calendar(identifier: .gregorian).startOfDay(for: Date())
+    }()
+    @State private var cellScale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+
+    private var cal: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.locale = Locale(identifier: "zh_CN")
+        return c
+    }
+
+    private var recordIndex: [String: ExperimentDayRecord] {
+        Dictionary(uniqueKeysWithValues: days.map { ($0.id, $0) })
+    }
+
+    // All days in the displayed month (padded to start on Monday)
+    private var gridDays: [Date?] {
+        let comps = cal.dateComponents([.year, .month], from: displayMonth)
+        guard let firstOfMonth = cal.date(from: comps),
+              let range = cal.range(of: .day, in: .month, for: firstOfMonth) else { return [] }
+
+        // weekday index 0=Mon … 6=Sun
+        let firstWeekday = (cal.component(.weekday, from: firstOfMonth) + 5) % 7
+        var result: [Date?] = Array(repeating: nil, count: firstWeekday)
+        for day in range {
+            result.append(cal.date(byAdding: .day, value: day - 1, to: firstOfMonth))
+        }
+        // pad to full rows
+        while result.count % 7 != 0 { result.append(nil) }
+        return result
+    }
+
+    private var monthTitle: String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.dateFormat = "yyyy年M月"
+        return fmt.string(from: displayMonth)
+    }
+
+    private func dayKey(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.calendar = cal
+        fmt.dateFormat = "yyyy-MM-dd"
+        return "past-\(fmt.string(from: date))"
+    }
+
+    private func isToday(_ date: Date) -> Bool {
+        cal.isDateInToday(date)
+    }
+
+    private func isFuture(_ date: Date) -> Bool {
+        cal.startOfDay(for: date) > cal.startOfDay(for: Date())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // Month navigation header
             HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("过去").font(.title2.bold())
-                    Text("切换不同日期，回看当天做过的实验").font(.caption).foregroundStyle(.secondary)
+                Button {
+                    displayMonth = cal.date(byAdding: .month, value: -1, to: displayMonth) ?? displayMonth
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.teal)
+                        .frame(width: 36, height: 36)
                 }
+                .buttonStyle(.plain)
+
                 Spacer()
-                Text(scale > 0.9 ? "大" : scale < 0.62 ? "小" : "中")
-                    .font(.caption.weight(.bold)).padding(.horizontal, 9).padding(.vertical, 6)
-                    .background(Color.teal.opacity(0.12), in: Capsule()).foregroundStyle(.teal)
+
+                Text(monthTitle)
+                    .font(.headline)
+
+                Spacer()
+
+                Button {
+                    let next = cal.date(byAdding: .month, value: 1, to: displayMonth) ?? displayMonth
+                    // don't navigate past current month
+                    if cal.startOfDay(for: next) <= cal.startOfDay(for: Date()) {
+                        displayMonth = next
+                    }
+                } label: {
+                    let next = cal.date(byAdding: .month, value: 1, to: displayMonth) ?? displayMonth
+                    let canForward = cal.startOfDay(for: next) <= cal.startOfDay(for: Date())
+                    Image(systemName: "chevron.right")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(canForward ? .teal : .secondary.opacity(0.3))
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
+                .disabled({
+                    let next = cal.date(byAdding: .month, value: 1, to: displayMonth) ?? displayMonth
+                    return cal.startOfDay(for: next) > cal.startOfDay(for: Date())
+                }())
             }
 
-            HStack(spacing: 10) {
-                Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
-                Slider(value: $scale, in: 0.48...1.08)
-                Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
-            }
+            // Weekday header: 一 二 三 四 五 六 日
+            let weekdaySymbols = ["一", "二", "三", "四", "五", "六", "日"]
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
+                ForEach(weekdaySymbols, id: \.self) { sym in
+                    Text(sym)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .bottom, spacing: 10) {
-                    ForEach(days) { day in
-                        CalendarDayCell(day: day, isSelected: selectedDayID == day.id, scale: scale) {
-                            selectedDayID = day.id
+                // Day cells
+                ForEach(Array(gridDays.enumerated()), id: \.offset) { _, date in
+                    if let date {
+                        CalendarGridCell(
+                            date: date,
+                            record: recordIndex[dayKey(date)],
+                            isSelected: selectedDayID == dayKey(date),
+                            isToday: isToday(date),
+                            isFuture: isFuture(date),
+                            cellScale: cellScale
+                        ) {
+                            let key = dayKey(date)
+                            if recordIndex[key] != nil {
+                                selectedDayID = key
+                            }
                         }
+                    } else {
+                        Color.clear
+                            .frame(height: baseCellHeight * cellScale)
                     }
                 }
-                .padding(.vertical, 2)
             }
+
+            // Pinch-to-zoom hint
+            Text("双指缩放可调整大小")
+                .font(.caption2)
+                .foregroundStyle(.secondary.opacity(0.6))
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(16)
         .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+        .gesture(
+            MagnificationGesture()
+                .onChanged { value in
+                    let proposed = lastScale * value
+                    cellScale = min(max(proposed, 0.6), 1.6)
+                }
+                .onEnded { value in
+                    lastScale = cellScale
+                }
+        )
+        // Jump to the month that contains the selected record when view appears
+        .onAppear {
+            if let day = days.first(where: { $0.id == selectedDayID }) ?? days.first {
+                selectedDayID = day.id
+                // parse the date from id "past-yyyy-MM-dd"
+                let raw = String(day.id.dropFirst("past-".count))
+                let fmt = DateFormatter()
+                fmt.locale = Locale(identifier: "zh_CN")
+                fmt.dateFormat = "yyyy-MM-dd"
+                if let date = fmt.date(from: raw) {
+                    displayMonth = date
+                }
+            }
+        }
     }
 }
 
-private struct CalendarDayCell: View {
-    let day: ExperimentDayRecord
+private let baseCellHeight: CGFloat = 44
+
+private struct CalendarGridCell: View {
+    let date: Date
+    let record: ExperimentDayRecord?
     let isSelected: Bool
-    let scale: Double
-    let select: () -> Void
+    let isToday: Bool
+    let isFuture: Bool
+    let cellScale: CGFloat
+    let onTap: () -> Void
+
+    private var dayNumber: String {
+        let cal = Calendar(identifier: .gregorian)
+        return "\(cal.component(.day, from: date))"
+    }
+
+    private var hasRecord: Bool { record != nil }
+    private var runCount: Int { record?.runs.count ?? 0 }
+
+    // colour dots for experiment types present
+    private var dotColors: [Color] {
+        guard let runs = record?.runs else { return [] }
+        let areas = Array(Set(runs.map(\.area)))
+        return areas.prefix(3).map { area -> Color in
+            switch area {
+            case .cell: return .teal
+            case .cloning: return .blue
+            case .blot: return .purple
+            }
+        }
+    }
 
     var body: some View {
-        Button(action: select) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(day.weekday).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Text(day.dateLabel).font(.headline.bold())
-                Spacer(minLength: 0)
-                VStack(alignment: .leading, spacing: max(3, 7 * scale)) {
-                    ForEach(0..<max(day.runs.count, 1), id: \.self) { i in
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(day.runs.isEmpty ? Color.secondary.opacity(0.18) : [Color.teal, .blue, .orange][i % 3].opacity(isSelected ? 0.92 : 0.58))
-                            .frame(width: max(22, 76 + scale * 46 - 30), height: max(5, 7 * scale))
+        let cellH = baseCellHeight * cellScale
+        let isDisabled = isFuture || !hasRecord
+
+        Button(action: onTap) {
+            VStack(spacing: 2) {
+                Text(dayNumber)
+                    .font(.system(size: max(11, 14 * cellScale), weight: isToday ? .bold : hasRecord ? .semibold : .regular))
+                    .foregroundStyle(
+                        isSelected ? .white :
+                        isFuture ? Color.secondary.opacity(0.25) :
+                        isToday ? .teal :
+                        hasRecord ? .primary : Color.secondary.opacity(0.35)
+                    )
+
+                if cellScale > 0.75 && hasRecord {
+                    HStack(spacing: 2) {
+                        ForEach(Array(dotColors.enumerated()), id: \.offset) { _, color in
+                            Circle()
+                                .fill(isSelected ? Color.white.opacity(0.9) : color)
+                                .frame(width: 4, height: 4)
+                        }
+                    }
+                } else {
+                    // minimal: just a thin tint line for days with records
+                    if hasRecord && !isSelected {
+                        Capsule()
+                            .fill(Color.teal.opacity(0.5))
+                            .frame(width: 16, height: 2)
+                    } else {
+                        Color.clear.frame(height: 2)
                     }
                 }
-                Text(day.runs.isEmpty ? "空" : "\(day.runs.count) 项")
-                    .font(.caption.monospacedDigit().weight(.bold))
-                    .foregroundStyle(isSelected ? .white : .secondary)
             }
-            .padding(12)
-            .frame(width: 76 + scale * 46, height: 102 + scale * 58, alignment: .leading)
-            .background(isSelected ? Color.teal : Color.labInset, in: RoundedRectangle(cornerRadius: 8))
-            .foregroundStyle(isSelected ? .white : .primary)
+            .frame(maxWidth: .infinity)
+            .frame(height: cellH)
+            .background(
+                isSelected ? Color.teal :
+                isToday && !isSelected ? Color.teal.opacity(0.1) :
+                Color.clear,
+                in: RoundedRectangle(cornerRadius: 6)
+            )
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
     }
 }
 

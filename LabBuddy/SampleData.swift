@@ -45,38 +45,62 @@ enum SampleData {
         )
     ]
 
-    static let pastDays: [ExperimentDayRecord] = [
-        ExperimentDayRecord(
-            id: "past-yesterday",
-            dateLabel: "昨天",
-            weekday: "Thu",
-            summary: "3 个实验 · 细胞换液、双酶切验证、WB 一抗孵育",
-            runs: [
-                runs[0],
-                runs[1],
-                runs[2]
-            ]
-        ),
-        ExperimentDayRecord(
-            id: "past-wednesday",
-            dateLabel: "周三",
-            weekday: "Wed",
-            summary: "2 个实验 · 铺板、SDS-PAGE 胶制备",
-            runs: [
-                runs[0],
-                runs[2]
-            ]
-        ),
-        ExperimentDayRecord(
-            id: "past-tuesday",
-            dateLabel: "周二",
-            weekday: "Tue",
-            summary: "1 个实验 · 质粒小提复核",
-            runs: [
-                runs[1]
-            ]
-        )
-    ]
+    static let pastDays: [ExperimentDayRecord] = {
+        let cal = Calendar(identifier: .gregorian)
+        let today = cal.startOfDay(for: Date())
+        let fmt = DateFormatter()
+        fmt.calendar = cal
+        fmt.locale = Locale(identifier: "zh_CN")
+        func key(_ offset: Int) -> String {
+            fmt.dateFormat = "yyyy-MM-dd"
+            return fmt.string(from: cal.date(byAdding: .day, value: offset, to: today)!)
+        }
+        func label(_ offset: Int) -> String {
+            fmt.dateFormat = "M月d日"
+            return fmt.string(from: cal.date(byAdding: .day, value: offset, to: today)!)
+        }
+        func weekday(_ offset: Int) -> String {
+            fmt.dateFormat = "EEE"
+            return fmt.string(from: cal.date(byAdding: .day, value: offset, to: today)!)
+        }
+        return [
+            ExperimentDayRecord(
+                id: "past-\(key(-1))",
+                dateLabel: label(-1),
+                weekday: weekday(-1),
+                summary: "3 个实验 · 细胞换液、双酶切验证、WB 一抗孵育",
+                runs: [runs[0], runs[1], runs[2]]
+            ),
+            ExperimentDayRecord(
+                id: "past-\(key(-2))",
+                dateLabel: label(-2),
+                weekday: weekday(-2),
+                summary: "2 个实验 · 铺板、SDS-PAGE 胶制备",
+                runs: [runs[0], runs[2]]
+            ),
+            ExperimentDayRecord(
+                id: "past-\(key(-4))",
+                dateLabel: label(-4),
+                weekday: weekday(-4),
+                summary: "1 个实验 · 质粒小提复核",
+                runs: [runs[1]]
+            ),
+            ExperimentDayRecord(
+                id: "past-\(key(-7))",
+                dateLabel: label(-7),
+                weekday: weekday(-7),
+                summary: "2 个实验 · 细胞传代、Western blot 准备",
+                runs: [runs[0], runs[2]]
+            ),
+            ExperimentDayRecord(
+                id: "past-\(key(-9))",
+                dateLabel: label(-9),
+                weekday: weekday(-9),
+                summary: "1 个实验 · T4 连接反应",
+                runs: [runs[1]]
+            ),
+        ]
+    }()
 
     static let protocols: [LabProtocol] = [
         LabProtocol(
