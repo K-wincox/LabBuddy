@@ -8,8 +8,8 @@ import AudioToolbox
 struct ContentView: View {
     @State private var importedRuns: [LabRun] = []
     @State private var tomorrowRuns: [LabRun] = []
-    @State private var pastDays: [ExperimentDayRecord] = SampleData.pastDays
-    @State private var inventoryItems: [InventoryItem] = SampleData.inventory
+    @State private var pastDays: [ExperimentDayRecord] = []
+    @State private var inventoryItems: [InventoryItem] = []
     @State private var projects: [Project] = []
     @AppStorage("lastLabBuddyOpenDate") private var lastOpenDate = ""
     @State private var showNewDaySheet = false
@@ -77,7 +77,7 @@ struct ContentView: View {
 
     private func performRollover() {
         let todayKey = lastOpenDate.isEmpty ? Self.dayKey(for: Date()) : lastOpenDate
-        let todaysRuns = (importedRuns + SampleData.runs).sortedByTimeLabel()
+        let todaysRuns = importedRuns.sortedByTimeLabel()
         if !todaysRuns.isEmpty {
             let archive = ExperimentDayRecord(
                 id: "past-\(todayKey)",
@@ -109,13 +109,12 @@ struct ContentView: View {
            let items = try? JSONDecoder().decode([InventoryItem].self, from: data) { inventoryItems = items }
         if let data = UserDefaults.standard.data(forKey: "userProjects"),
            let projs = try? JSONDecoder().decode([Project].self, from: data), !projs.isEmpty { projects = projs }
-        else { projects = SampleData.sampleProjects }
         migrateLegacyProjects()
     }
 
     private func migrateLegacyProjects() {
         var needsSave = false
-        let allRuns = importedRuns + tomorrowRuns + pastDays.flatMap(\.runs) + SampleData.runs
+        let allRuns = importedRuns + tomorrowRuns + pastDays.flatMap(\.runs)
         for run in allRuns {
             if let ctx = run.projectID, !ctx.isEmpty, !projects.contains(where: { $0.id == ctx }) {
                 // Legacy free-text projectContext — create a Project from it
@@ -162,7 +161,10 @@ struct ContentView: View {
 
     private func resetDemoData() {
         importedRuns = []
-        inventoryItems = SampleData.inventory
+        tomorrowRuns = []
+        pastDays = []
+        inventoryItems = []
+        projects = []
         UserDefaults.standard.removeObject(forKey: "completedStepIDs")
         UserDefaults.standard.removeObject(forKey: "activeLabTimers")
         UserDefaults.standard.removeObject(forKey: "importedLabRuns")
@@ -171,7 +173,6 @@ struct ContentView: View {
         UserDefaults.standard.removeObject(forKey: "inventoryItems")
         UserDefaults.standard.removeObject(forKey: "lastLabBuddyOpenDate")
         UserDefaults.standard.removeObject(forKey: "userProjects")
-        projects = []
     }
 
     // MARK: - Date helpers
@@ -270,7 +271,7 @@ private struct TodayView: View {
     @State private var selectedDataCardRun: LabRun?
     @State private var focusedRun: LabRun?
     @State private var selectedMode: TodayMode = .today
-    @State private var selectedRecordDayID = SampleData.pastDays.first?.id ?? ""
+    @State private var selectedRecordDayID = ""
     @State private var scheduleRequest: ScheduleRequest?
     @State private var showEndDayConfirm = false
     @AppStorage("preferencesTimerSound") private var timerSound = true
@@ -286,7 +287,7 @@ private struct TodayView: View {
     }
 
     private var todayRuns: [LabRun] {
-        let runs = (importedRuns + SampleData.runs).sortedByTimeLabel()
+        let runs = importedRuns.sortedByTimeLabel()
         guard let filter = selectedProjectFilter else { return runs }
         return runs.filter { $0.projectID == filter }
     }
