@@ -85,7 +85,7 @@ struct DataCardSheet: View {
                                 }
                             }
                         }
-                        .onChange(of: selectedPhoto) {
+                        .onChange(of: selectedPhoto) { _, _ in
                             Task {
                                 if let data = try? await selectedPhoto?.loadTransferable(type: Data.self) {
                                     cardImageData = data
@@ -132,6 +132,7 @@ struct DataCardSheet: View {
                         Button {
                             Clipboard.copy(conditionText)
                             copied = true
+                            hapticSuccess()
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
                         } label: {
                             Label(copied ? "已复制" : "复制实验条件", systemImage: copied ? "checkmark.circle.fill" : "doc.on.doc")
@@ -144,6 +145,7 @@ struct DataCardSheet: View {
                             if let rendered = renderCard() {
                                 UIImageWriteToSavedPhotosAlbum(rendered, nil, nil, nil)
                                 saveSuccess = true
+                                hapticSuccess()
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { saveSuccess = false }
                             }
                         } label: {
@@ -321,6 +323,19 @@ extension Color {
     static let labBackground = Color(red: 0.95, green: 0.97, blue: 0.97)
     static let labPanel = Color(red: 1.0, green: 1.0, blue: 0.99)
     static let labInset = Color(red: 0.90, green: 0.95, blue: 0.95)
+
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 6: (a, r, g, b) = (255, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        case 8: (a, r, g, b) = (int >> 24 & 0xFF, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default: (a, r, g, b) = (255, 0, 0, 0)
+        }
+        self.init(.sRGB, red: Double(r)/255, green: Double(g)/255, blue: Double(b)/255, opacity: Double(a)/255)
+    }
 }
 
 // MARK: - Clipboard (shared)
@@ -329,4 +344,13 @@ enum Clipboard {
     static func copy(_ text: String) {
         UIPasteboard.general.string = text
     }
+}
+
+// MARK: - Haptic Feedback Helper
+
+private func hapticSuccess() {
+    #if os(iOS)
+    let generator = UINotificationFeedbackGenerator()
+    generator.notificationOccurred(.success)
+    #endif
 }

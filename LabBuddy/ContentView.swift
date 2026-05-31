@@ -1,6 +1,8 @@
 import SwiftUI
 #if os(iOS)
 import UIKit
+import AVFoundation
+import AudioToolbox
 #endif
 
 struct ContentView: View {
@@ -8,6 +10,7 @@ struct ContentView: View {
     @State private var tomorrowRuns: [LabRun] = []
     @State private var pastDays: [ExperimentDayRecord] = SampleData.pastDays
     @State private var inventoryItems: [InventoryItem] = SampleData.inventory
+    @State private var projects: [Project] = []
     @AppStorage("lastLabBuddyOpenDate") private var lastOpenDate = ""
     @State private var showNewDaySheet = false
 
@@ -18,6 +21,7 @@ struct ContentView: View {
                     importedRuns: $importedRuns,
                     tomorrowRuns: $tomorrowRuns,
                     pastDays: $pastDays,
+                    projects: projects,
                     onEndDay: endDay
                 )
                 .tabItem { Label("今日", systemImage: "calendar") }
@@ -29,7 +33,7 @@ struct ContentView: View {
                     .tabItem { Label("工具", systemImage: "function") }
 
                 NavigationStack {
-                    MyWorkspaceView(items: $inventoryItems, resetDemoData: resetDemoData)
+                    MyWorkspaceView(items: $inventoryItems, projects: $projects, resetDemoData: resetDemoData)
                         .navigationTitle("我的")
                 }
                 .tabItem { Label("我的", systemImage: "person.crop.circle") }
@@ -40,10 +44,11 @@ struct ContentView: View {
             loadAll()
             checkNewDay()
         }
-        .onChange(of: importedRuns) { saveImportedRuns(importedRuns) }
-        .onChange(of: tomorrowRuns) { saveTomorrowRuns(tomorrowRuns) }
-        .onChange(of: pastDays) { savePastDays(pastDays) }
-        .onChange(of: inventoryItems) { saveInventoryItems(inventoryItems) }
+        .onChange(of: importedRuns) { _, newValue in saveImportedRuns(newValue) }
+        .onChange(of: tomorrowRuns) { _, newValue in saveTomorrowRuns(newValue) }
+        .onChange(of: pastDays) { _, newValue in savePastDays(newValue) }
+        .onChange(of: inventoryItems) { _, newValue in saveInventoryItems(newValue) }
+        .onChange(of: projects) { _, newValue in saveProjects(newValue) }
         .sheet(isPresented: $showNewDaySheet) {
             NewDayConfirmSheet(
                 confirmRollover: {
@@ -85,7 +90,7 @@ struct ContentView: View {
             pastDays.insert(archive, at: 0)
         }
         importedRuns = tomorrowRuns.map {
-            LabRun(id: $0.id, title: $0.title, area: $0.area, timeLabel: $0.timeLabel, status: "已排期", protocolName: $0.protocolName, scaledVolumeLabel: $0.scaledVolumeLabel, steps: $0.steps)
+            LabRun(id: $0.id, title: $0.title, area: $0.area, timeLabel: $0.timeLabel, status: "已排期", protocolName: $0.protocolName, scaledVolumeLabel: $0.scaledVolumeLabel, projectID: $0.projectID, steps: $0.steps)
         }
         tomorrowRuns = []
         lastOpenDate = Self.dayKey(for: Date())
@@ -102,6 +107,36 @@ struct ContentView: View {
            let days = try? JSONDecoder().decode([ExperimentDayRecord].self, from: data) { pastDays = days }
         if let data = UserDefaults.standard.data(forKey: "inventoryItems"),
            let items = try? JSONDecoder().decode([InventoryItem].self, from: data) { inventoryItems = items }
+        if let data = UserDefaults.standard.data(forKey: "userProjects"),
+           let projs = try? JSONDecoder().decode([Project].self, from: data), !projs.isEmpty { projects = projs }
+        else { projects = SampleData.sampleProjects }
+        migrateLegacyProjects()
+    }
+
+    private func migrateLegacyProjects() {
+        var needsSave = false
+        let allRuns = importedRuns + tomorrowRuns + pastDays.flatMap(\.runs) + SampleData.runs
+        for run in allRuns {
+            if let ctx = run.projectID, !ctx.isEmpty, !projects.contains(where: { $0.id == ctx }) {
+                // Legacy free-text projectContext — create a Project from it
+                let newProject = Project(name: ctx, colorHex: Project.palette.randomElement()?.hex ?? "#4ECDC4", description: "")
+                projects.append(newProject)
+                needsSave = true
+            }
+        }
+        // Migrate runs with legacy projectContext to projectID
+        for i in importedRuns.indices {
+            if let ctx = importedRuns[i].projectID, !ctx.isEmpty, projects.contains(where: { $0.id == ctx || $0.name == ctx }) {
+                if let project = projects.first(where: { $0.name == ctx }) {
+                    importedRuns[i].projectID = project.id
+                    needsSave = true
+                }
+            }
+        }
+        if needsSave {
+            saveImportedRuns(importedRuns)
+            saveProjects(projects)
+        }
     }
 
     private func saveImportedRuns(_ runs: [LabRun]) {
@@ -120,6 +155,10 @@ struct ContentView: View {
         guard let data = try? JSONEncoder().encode(items) else { return }
         UserDefaults.standard.set(data, forKey: "inventoryItems")
     }
+    private func saveProjects(_ projs: [Project]) {
+        guard let data = try? JSONEncoder().encode(projs) else { return }
+        UserDefaults.standard.set(data, forKey: "userProjects")
+    }
 
     private func resetDemoData() {
         importedRuns = []
@@ -131,7 +170,8 @@ struct ContentView: View {
         UserDefaults.standard.removeObject(forKey: "pastExperimentDays")
         UserDefaults.standard.removeObject(forKey: "inventoryItems")
         UserDefaults.standard.removeObject(forKey: "lastLabBuddyOpenDate")
-        lastOpenDate = ""
+        UserDefaults.standard.removeObject(forKey: "userProjects")
+        projects = []
     }
 
     // MARK: - Date helpers
@@ -222,6 +262,7 @@ private struct TodayView: View {
     @Binding var importedRuns: [LabRun]
     @Binding var tomorrowRuns: [LabRun]
     @Binding var pastDays: [ExperimentDayRecord]
+    let projects: [Project]
     let onEndDay: () -> Void
 
     @AppStorage("completedStepIDs") private var completedStepIDsData = ""
@@ -232,6 +273,12 @@ private struct TodayView: View {
     @State private var selectedRecordDayID = SampleData.pastDays.first?.id ?? ""
     @State private var scheduleRequest: ScheduleRequest?
     @State private var showEndDayConfirm = false
+    @AppStorage("preferencesTimerSound") private var timerSound = true
+    @AppStorage("preferencesVoiceAnnouncementTemplate") private var voiceAnnouncementTemplate = "{实验}，{步骤}已完成"
+    @State private var lastNotifiedTimerIDs: Set<String> = []
+    @State private var selectedProjectFilter: String? = nil
+
+    private let speechSynthesizer = AVSpeechSynthesizer()
 
     private var completedStepIDs: Set<String> {
         get { Set(completedStepIDsData.split(separator: ",").map(String.init)) }
@@ -239,7 +286,9 @@ private struct TodayView: View {
     }
 
     private var todayRuns: [LabRun] {
-        (importedRuns + SampleData.runs).sortedByTimeLabel()
+        let runs = (importedRuns + SampleData.runs).sortedByTimeLabel()
+        guard let filter = selectedProjectFilter else { return runs }
+        return runs.filter { $0.projectID == filter }
     }
 
     private var historyDays: [ExperimentDayRecord] { pastDays }
@@ -263,62 +312,116 @@ private struct TodayView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    if !projects.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                FilterChip(title: "全部", isSelected: selectedProjectFilter == nil) {
+                                    selectedProjectFilter = nil
+                                }
+                                ForEach(projects) { project in
+                                    FilterChip(
+                                        title: project.name,
+                                        isSelected: selectedProjectFilter == project.id,
+                                        accentColor: Color(hex: project.colorHex)
+                                    ) {
+                                        selectedProjectFilter = selectedProjectFilter == project.id ? nil : project.id
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                    }
+
                     switch selectedMode {
                     case .past:
                         ExperimentCalendarView(
                             days: historyDays,
-                            selectedDayID: $selectedRecordDayID
+                            selectedDayID: $selectedRecordDayID,
+                            projects: projects
                         )
-                        ExperimentDayDetailView(day: selectedRecordDay, completedStepIDs: completedStepIDs)
+                        if let filter = selectedProjectFilter {
+                            ProjectDaysListView(
+                                days: historyDays,
+                                projectFilter: filter,
+                                projects: projects,
+                                completedStepIDs: completedStepIDs
+                            )
+                        } else {
+                            ExperimentDayDetailView(
+                                day: selectedRecordDay,
+                                completedStepIDs: completedStepIDs,
+                                projects: projects
+                            )
+                        }
 
                     case .today:
                         if !activeTimers.isEmpty {
                             TimerDock(activeTimers: activeTimers, stopTimer: stopTimer)
                         }
 
-                        EditableScheduleTimelineView(
-                            title: "今天",
-                            subtitle: "\(todayRuns.count) 个实验",
-                            emptyTitle: "今天还没有实验",
-                            emptySubtitle: "从 09:00 开始新建第一个实验。",
+                        DayTimelineView(
                             targetDay: .today,
                             runs: todayRuns,
                             completedStepIDs: completedStepIDs,
                             activeTimers: activeTimers,
+                            projects: projects,
                             addAtTime: { timeLabel in
                                 scheduleRequest = ScheduleRequest(targetDay: .today, timeLabel: timeLabel)
                             },
-                            toggleStep: toggleStepCompletion,
-                            startTimer: { run in startTimer(for: run) },
+                            startTimer: { run, step, customMin in startTimer(for: run, step: step, customMinutes: customMin) },
                             showDataCard: { selectedDataCardRun = $0 },
                             openBenchMode: { focusedRun = $0 },
                             removeRun: { run in
                                 if run.id.hasPrefix("import-") {
                                     importedRuns.removeAll { $0.id == run.id }
+                                    hapticFeedback(.medium)
                                 }
-                            }
+                            },
+                            onUpdateRun: { run, newTitle, newProject in
+                                if let index = importedRuns.firstIndex(where: { $0.id == run.id }) {
+                                    importedRuns[index].title = newTitle
+                                    importedRuns[index].projectID = newProject
+                                }
+                            },
+                            pauseTimer: pauseTimer,
+                            resumeTimer: resumeTimer,
+                            stopTimer: stopTimer
                         )
 
-                        // End day button
                         Button {
                             showEndDayConfirm = true
                         } label: {
                             Label("结束今天", systemImage: "moon.stars")
-                                .frame(maxWidth: .infinity, minHeight: 50)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
 
                     case .tomorrow:
-                        TomorrowPlanView(
+                        DayTimelineView(
+                            targetDay: .tomorrow,
                             runs: tomorrowRuns.sortedByTimeLabel(),
                             completedStepIDs: completedStepIDs,
-                            removeRun: { id in tomorrowRuns.removeAll { $0.id == id } },
-                            showDataCard: { selectedDataCardRun = $0 },
+                            activeTimers: [],
+                            projects: projects,
                             addAtTime: { timeLabel in
                                 scheduleRequest = ScheduleRequest(targetDay: .tomorrow, timeLabel: timeLabel)
-                            }
+                            },
+                            startTimer: { _, _, _ in },
+                            showDataCard: { selectedDataCardRun = $0 },
+                            openBenchMode: { _ in },
+                            removeRun: { run in tomorrowRuns.removeAll { $0.id == run.id }; hapticFeedback(.medium) },
+                            onUpdateRun: { run, newTitle, newProject in
+                                if let index = tomorrowRuns.firstIndex(where: { $0.id == run.id }) {
+                                    tomorrowRuns[index].title = newTitle
+                                    tomorrowRuns[index].projectID = newProject
+                                }
+                            },
+                            pauseTimer: { _ in },
+                            resumeTimer: { _ in },
+                            stopTimer: { _ in }
                         )
                     }
                 }
@@ -328,7 +431,7 @@ private struct TodayView: View {
                 DataCardSheet(run: run, completedStepIDs: completedStepIDs)
             }
             .sheet(item: $scheduleRequest) { request in
-                AddExperimentSheet(request: request) { run in
+                AddExperimentSheet(request: request, projects: projects) { run in
                     switch request.targetDay {
                     case .today: importedRuns.insert(run, at: 0)
                     case .tomorrow: tomorrowRuns.insert(run, at: 0)
@@ -349,7 +452,17 @@ private struct TodayView: View {
                         markRunComplete(run)
                         selectedDataCardRun = run
                     },
-                    startTimer: { startTimer(for: run) }
+                    startTimer: { customMin in startTimer(for: run, customMinutes: customMin) },
+                    pauseTimer: {
+                        if let t = activeTimers.first(where: { $0.runID == run.id }) { pauseTimer(t) }
+                    },
+                    resumeTimer: {
+                        if let t = activeTimers.first(where: { $0.runID == run.id }) { resumeTimer(t) }
+                    },
+                    stopTimer: {
+                        if let t = activeTimers.first(where: { $0.runID == run.id }) { stopTimer(t) }
+                    },
+                    showDataCard: { selectedDataCardRun = run }
                 )
             }
             .confirmationDialog("结束今天", isPresented: $showEndDayConfirm, titleVisibility: .visible) {
@@ -361,29 +474,56 @@ private struct TodayView: View {
                 Text("今天所有实验（含未完成）将归档到「过去」，明天的计划移入今天。")
             }
             .onAppear(perform: loadTimers)
-            .onChange(of: activeTimers) { saveTimers(activeTimers) }
+            .onChange(of: activeTimers) { _, newTimers in
+                saveTimers(newTimers)
+                checkForFinishedTimers(newTimers)
+            }
         }
     }
 
-    private func startTimer(for run: LabRun) {
-        guard let step = run.steps.first(where: { $0.durationMinutes != nil && !completedStepIDs.contains($0.id) })
-                ?? run.steps.first(where: { $0.durationMinutes != nil }),
-              let dur = step.durationMinutes else { return }
+    private func startTimer(for run: LabRun, step: LabStep? = nil, customMinutes: Int? = nil) {
+        let targetStep = step ?? (run.steps.first(where: { $0.durationMinutes != nil && !completedStepIDs.contains($0.id) })
+                                  ?? run.steps.first(where: { $0.durationMinutes != nil }))
+        guard let targetStep = targetStep else { return }
+        let dur = customMinutes ?? targetStep.durationMinutes ?? 5
         let now = Date()
-        let timer = ActiveLabTimer(id: "\(run.id)-\(step.id)", runID: run.id, runTitle: run.title, stepTitle: step.title, startedAt: now, endsAt: now.addingTimeInterval(TimeInterval(dur * 60)))
+        let timer = ActiveLabTimer(id: "\(run.id)-\(targetStep.id)", runID: run.id, runTitle: run.title, stepTitle: targetStep.title, startedAt: now, endsAt: now.addingTimeInterval(TimeInterval(dur * 60)))
         activeTimers.removeAll { $0.id == timer.id || $0.runID == run.id }
         activeTimers.append(timer)
         activeTimers.sort { $0.endsAt < $1.endsAt }
+        hapticNotification(.success)
     }
 
     private func stopTimer(_ timer: ActiveLabTimer) {
         activeTimers.removeAll { $0.id == timer.id }
+        lastNotifiedTimerIDs.remove(timer.id)
+        hapticFeedback(.medium)
+    }
+
+    private func pauseTimer(_ timer: ActiveLabTimer) {
+        guard let idx = activeTimers.firstIndex(where: { $0.id == timer.id }) else { return }
+        // Freeze remaining and push endsAt far out so it can never fire while paused
+        let frozen = timer.remainingSeconds
+        activeTimers[idx].pausedRemaining = frozen
+        activeTimers[idx].endsAt = Date.distantFuture
+        hapticFeedback(.light)
+    }
+
+    private func resumeTimer(_ timer: ActiveLabTimer) {
+        guard let idx = activeTimers.firstIndex(where: { $0.id == timer.id }),
+              let paused = timer.pausedRemaining else { return }
+        let newEndsAt = Date().addingTimeInterval(TimeInterval(paused))
+        activeTimers[idx].endsAt = newEndsAt
+        activeTimers[idx].pausedRemaining = nil
+        activeTimers.sort { $0.endsAt < $1.endsAt }
+        hapticFeedback(.light)
     }
 
     private func toggleStepCompletion(_ stepID: String) {
         var next = completedStepIDs
         if next.contains(stepID) { next.remove(stepID) } else { next.insert(stepID) }
         completedStepIDs = next
+        hapticFeedback(.light)
     }
 
     private func markRunComplete(_ run: LabRun) {
@@ -392,17 +532,72 @@ private struct TodayView: View {
         completedStepIDs = next
         activeTimers.removeAll { $0.runID == run.id }
         focusedRun = nil
+        hapticNotification(.success)
+    }
+
+    // MARK: - Haptic Feedback
+
+    private func hapticFeedback(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        #if os(iOS)
+        let generator = UIImpactFeedbackGenerator(style: style)
+        generator.impactOccurred()
+        #endif
+    }
+
+    private func hapticNotification(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+        #if os(iOS)
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(type)
+        #endif
     }
 
     private func loadTimers() {
         guard let data = UserDefaults.standard.data(forKey: "activeLabTimers"),
               let timers = try? JSONDecoder().decode([ActiveLabTimer].self, from: data) else { return }
-        activeTimers = timers.sorted { $0.endsAt < $1.endsAt }
+        // Only keep timers that are still relevant: not finished, or paused
+        let valid = timers.filter { !$0.isFinished }
+        activeTimers = valid.sorted { $0.endsAt < $1.endsAt }
+        // If we filtered any out, persist the cleaned list
+        if valid.count != timers.count {
+            saveTimers(valid)
+        }
     }
 
     private func saveTimers(_ timers: [ActiveLabTimer]) {
         guard let data = try? JSONEncoder().encode(timers) else { return }
         UserDefaults.standard.set(data, forKey: "activeLabTimers")
+    }
+
+    private func checkForFinishedTimers(_ timers: [ActiveLabTimer]) {
+        for timer in timers {
+            if timer.isFinished && !lastNotifiedTimerIDs.contains(timer.id) {
+                lastNotifiedTimerIDs.insert(timer.id)
+                playTimerAlert(for: timer)
+            }
+        }
+        // Clean up old notified IDs
+        lastNotifiedTimerIDs = lastNotifiedTimerIDs.filter { id in
+            timers.contains { $0.id == id }
+        }
+    }
+
+    private func playTimerAlert(for timer: ActiveLabTimer) {
+        #if os(iOS)
+        // Play system sound
+        AudioServicesPlaySystemSound(1005)
+
+        // Use customizable voice template if sound is enabled
+        if timerSound {
+            let message = voiceAnnouncementTemplate
+                .replacingOccurrences(of: "{实验}", with: timer.runTitle)
+                .replacingOccurrences(of: "{步骤}", with: timer.stepTitle)
+            let utterance = AVSpeechUtterance(string: message)
+            utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
+            utterance.rate = 0.5
+            utterance.volume = 1.0
+            speechSynthesizer.speak(utterance)
+        }
+        #endif
     }
 }
 
@@ -428,22 +623,30 @@ private enum AddExperimentPath: String, CaseIterable, Identifiable {
 
 struct AddExperimentSheet: View {
     let request: ScheduleRequest
+    let projects: [Project]
     let onAdd: (LabRun) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var path: AddExperimentPath = .importProtocol
     @State private var selectedProtocolID = SampleData.protocols.first?.id ?? ""
     @State private var targetVolume = 50.0
+    @State private var targetVolumeText = "50"
+    @State private var experimentName = ""
+    @State private var selectedProjectID: String? = nil
     @State private var manualTitle = ""
     @State private var manualArea: WorkflowArea = .cell
     @State private var manualNote = ""
     @State private var carryOverTitle = ""
+    @State private var editingTime = false
+    @State private var selectedHour = 9
+    @State private var selectedMinute = 0
 
     private var selectedProtocol: LabProtocol {
         SampleData.protocols.first { $0.id == selectedProtocolID } ?? SampleData.protocols[0]
     }
 
     private var destinationTitle: String {
-        request.targetDay == .today ? "今天 \(request.timeLabel)" : "明天 \(request.timeLabel)"
+        let timeStr = editingTime ? String(format: "%02d:%02d", selectedHour, selectedMinute) : request.timeLabel
+        return request.targetDay == .today ? "今天 \(timeStr)" : "明天 \(timeStr)"
     }
 
     var body: some View {
@@ -459,7 +662,50 @@ struct AddExperimentSheet: View {
                 }
 
                 Section("插入位置") {
-                    Label(destinationTitle, systemImage: "calendar.badge.plus").font(.headline)
+                    Button {
+                        editingTime.toggle()
+                        if editingTime {
+                            // Parse current time
+                            let parts = request.timeLabel.split(separator: ":")
+                            if parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) {
+                                selectedHour = h
+                                selectedMinute = m
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Label(destinationTitle, systemImage: "calendar.badge.plus")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Image(systemName: editingTime ? "checkmark.circle.fill" : "pencil.circle")
+                                .foregroundStyle(.teal)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if editingTime {
+                        HStack {
+                            Picker("小时", selection: $selectedHour) {
+                                ForEach(0..<24) { h in
+                                    Text(String(format: "%02d", h)).tag(h)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(width: 80)
+
+                            Text(":").font(.title2.bold())
+
+                            Picker("分钟", selection: $selectedMinute) {
+                                ForEach([0, 15, 30, 45], id: \.self) { m in
+                                    Text(String(format: "%02d", m)).tag(m)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(width: 80)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
                 }
 
                 switch path {
@@ -468,12 +714,49 @@ struct AddExperimentSheet: View {
                         Picker("Protocol", selection: $selectedProtocolID) {
                             ForEach(SampleData.protocols) { p in Text(p.name).tag(p.id) }
                         }
+                        .onChange(of: selectedProtocolID) { _, _ in
+                            if experimentName.isEmpty || experimentName == SampleData.protocols.first(where: { $0.id == selectedProtocolID })?.name {
+                                experimentName = selectedProtocol.name
+                            }
+                        }
+                    }
+
+                    Section("实验命名") {
+                        TextField("实验名称", text: $experimentName, prompt: Text(selectedProtocol.name))
+                            .font(.body)
+                        if !projects.isEmpty {
+                            Picker("所属项目", selection: $selectedProjectID) {
+                                Text("无项目").tag(nil as String?)
+                                ForEach(projects) { project in
+                                    HStack {
+                                        Circle()
+                                            .fill(Color(hex: project.colorHex))
+                                            .frame(width: 8, height: 8)
+                                        Text(project.name)
+                                    }
+                                    .tag(project.id as String?)
+                                }
+                            }
+                            .font(.subheadline)
+                        }
+                    }
+
+                    Section("体积与预览") {
                         HStack {
                             Text("目标体积")
                             Spacer()
-                            Text("\(Int(targetVolume)) \(selectedProtocol.volumeUnit)").font(.headline.monospacedDigit())
+                            TextField("体积", text: $targetVolumeText)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 80)
+                                .onChange(of: targetVolumeText) { _, newValue in
+                                    if let val = Double(newValue), val >= 10, val <= 200 {
+                                        targetVolume = val
+                                    }
+                                }
+                            Text(selectedProtocol.volumeUnit)
+                                .foregroundStyle(.secondary)
                         }
-                        Slider(value: $targetVolume, in: 10...200, step: 10)
                     }
                     Section("预览") {
                         LabeledContent("实验类型", value: selectedProtocol.area.rawValue)
@@ -484,7 +767,7 @@ struct AddExperimentSheet: View {
                     Section("手动实验") {
                         TextField("实验名称", text: $manualTitle)
                         Picker("实验类型", selection: $manualArea) {
-                            ForEach(WorkflowArea.allCases) { area in Text(area.rawValue).tag(area) }
+                            ForEach(WorkflowArea.builtIn) { area in Text(area.rawValue).tag(area) }
                         }
                         TextField("备注（可选）", text: $manualNote)
                     }
@@ -511,15 +794,22 @@ struct AddExperimentSheet: View {
                     .disabled(path == .manual && manualTitle.isEmpty || path == .carryOver && carryOverTitle.isEmpty)
                 }
             }
-            .navigationTitle("添加实验")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+            }
+            .onAppear {
+                if experimentName.isEmpty {
+                    experimentName = selectedProtocol.name
+                }
             }
         }
     }
 
     private func buildRun() -> LabRun {
         let ts = Int(Date().timeIntervalSince1970)
+        let finalTimeLabel = editingTime ? String(format: "%02d:%02d", selectedHour, selectedMinute) : request.timeLabel
+
         switch path {
         case .importProtocol:
             let factor = targetVolume / selectedProtocol.baseVolume
@@ -531,14 +821,19 @@ struct AddExperimentSheet: View {
                 LabStep(id: "\(s.id)-\(ts)", title: s.title, detail: s.detail, durationMinutes: s.durationMinutes ?? dur, isCarryOver: s.isCarryOver)
             }) + [LabStep(id: "record-\(ts)", title: "记录结果", detail: "完成后生成结果卡片", durationMinutes: nil, isCarryOver: false)]
 
+            let finalName = experimentName.trimmingCharacters(in: .whitespaces).isEmpty ? selectedProtocol.name : experimentName
+            let volumeLabel = "\(formatVol(targetVolume)) \(selectedProtocol.volumeUnit) · x\(String(format: "%.2f", factor))"
+            let project = selectedProjectID
+
             return LabRun(
                 id: "import-\(request.targetDay.rawValue)-\(selectedProtocol.id)-\(ts)",
-                title: selectedProtocol.name,
+                title: finalName,
                 area: selectedProtocol.area,
-                timeLabel: request.timeLabel,
+                timeLabel: finalTimeLabel,
                 status: request.targetDay == .today ? "已排期" : "明日计划",
                 protocolName: selectedProtocol.name,
-                scaledVolumeLabel: "\(formatVol(targetVolume)) \(selectedProtocol.volumeUnit) · x\(String(format: "%.2f", factor))",
+                scaledVolumeLabel: volumeLabel,
+                projectID: project,
                 steps: steps
             )
 
@@ -547,10 +842,11 @@ struct AddExperimentSheet: View {
                 id: "manual-\(ts)",
                 title: manualTitle,
                 area: manualArea,
-                timeLabel: request.timeLabel,
+                timeLabel: finalTimeLabel,
                 status: request.targetDay == .today ? "手动" : "明日手动",
                 protocolName: "手动实验",
                 scaledVolumeLabel: "",
+                projectID: nil,
                 steps: [
                     LabStep(id: "manual-step-\(ts)", title: manualTitle, detail: manualNote.isEmpty ? "手动实验" : manualNote, durationMinutes: nil, isCarryOver: false)
                 ]
@@ -561,10 +857,11 @@ struct AddExperimentSheet: View {
                 id: "carryover-\(ts)",
                 title: carryOverTitle,
                 area: .cell,
-                timeLabel: request.timeLabel,
+                timeLabel: finalTimeLabel,
                 status: "顺延占位",
                 protocolName: "顺延占位",
                 scaledVolumeLabel: "",
+                projectID: nil,
                 steps: [
                     LabStep(id: "co-step-\(ts)", title: carryOverTitle, detail: "跨夜或长时间进行中", durationMinutes: nil, isCarryOver: true)
                 ]
@@ -602,6 +899,7 @@ private enum TodayMode: String, CaseIterable, Identifiable {
 private struct ExperimentCalendarView: View {
     let days: [ExperimentDayRecord]
     @Binding var selectedDayID: String
+    var projects: [Project] = []
 
     @State private var displayMonth: Date = {
         Calendar(identifier: .gregorian).startOfDay(for: Date())
@@ -720,7 +1018,8 @@ private struct ExperimentCalendarView: View {
                             isSelected: selectedDayID == dayKey(date),
                             isToday: isToday(date),
                             isFuture: isFuture(date),
-                            cellScale: cellScale
+                            cellScale: cellScale,
+                            projects: projects
                         ) {
                             let key = dayKey(date)
                             if recordIndex[key] != nil {
@@ -778,6 +1077,7 @@ private struct CalendarGridCell: View {
     let isToday: Bool
     let isFuture: Bool
     let cellScale: CGFloat
+    var projects: [Project] = []
     let onTap: () -> Void
 
     private var dayNumber: String {
@@ -786,18 +1086,14 @@ private struct CalendarGridCell: View {
     }
 
     private var hasRecord: Bool { record != nil }
-    private var runCount: Int { record?.runs.count ?? 0 }
 
-    // colour dots for experiment types present
+    // Project-color dots for experiments on this day
     private var dotColors: [Color] {
         guard let runs = record?.runs else { return [] }
-        let areas = Array(Set(runs.map(\.area)))
-        return areas.prefix(3).map { area -> Color in
-            switch area {
-            case .cell: return .teal
-            case .cloning: return .blue
-            case .blot: return .purple
-            }
+        let projectIDs = Array(Set(runs.compactMap(\.projectID)))
+        return projectIDs.prefix(3).compactMap { pid in
+            guard let hex = projects.first(where: { $0.id == pid })?.colorHex else { return nil }
+            return Color(hex: hex)
         }
     }
 
@@ -852,6 +1148,7 @@ private struct CalendarGridCell: View {
 private struct ExperimentDayDetailView: View {
     let day: ExperimentDayRecord
     let completedStepIDs: Set<String>
+    var projects: [Project] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -900,6 +1197,90 @@ private struct ExperimentDayDetailView: View {
     }
 }
 
+// MARK: - Project Days List (past view when project filter active)
+
+private struct ProjectDaysListView: View {
+    let days: [ExperimentDayRecord]
+    let projectFilter: String
+    let projects: [Project]
+    let completedStepIDs: Set<String>
+
+    private var projectName: String {
+        projects.first { $0.id == projectFilter }?.name ?? ""
+    }
+    private var projectColor: Color {
+        if let hex = projects.first(where: { $0.id == projectFilter })?.colorHex {
+            return Color(hex: hex)
+        }
+        return .teal
+    }
+
+    private var matchingDays: [(day: ExperimentDayRecord, runs: [LabRun])] {
+        days.compactMap { day in
+            let matching = day.runs.filter { $0.projectID == projectFilter }
+            guard !matching.isEmpty else { return nil }
+            return (day, matching)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Circle()
+                    .fill(projectColor)
+                    .frame(width: 10, height: 10)
+                Text("\(projectName) · \(matchingDays.count) 天")
+                    .font(.headline)
+                Spacer()
+            }
+
+            if matchingDays.isEmpty {
+                Text("暂无实验记录")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical)
+            } else {
+                ForEach(matchingDays, id: \.day.id) { item in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(item.day.dateLabel)
+                                .font(.subheadline.weight(.semibold))
+                            Text(item.day.weekday)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(item.runs.count) 个实验")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(projectColor.opacity(0.12), in: Capsule())
+                                .foregroundStyle(projectColor)
+                        }
+                        ForEach(item.runs) { run in
+                            HStack(spacing: 10) {
+                                Text(run.timeLabel)
+                                    .font(.caption.monospacedDigit().weight(.semibold))
+                                    .frame(width: 48, alignment: .leading)
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(run.title).font(.subheadline.weight(.semibold))
+                                    Text("\(run.area.rawValue) · \(run.steps.filter { completedStepIDs.contains($0.id) }.count)/\(run.steps.count) 步")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                            }
+                            .padding(.leading, 8)
+                        }
+                    }
+                    .padding(14)
+                    .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 // MARK: - Timer Dock
 
 private struct TimerDock: View {
@@ -936,136 +1317,1057 @@ private struct TimerDock: View {
     }
 }
 
-// MARK: - Editable Schedule Timeline
+// MARK: - Day Timeline View (vertical, Apple Calendar-style)
 
-private struct EditableScheduleTimelineView: View {
-    let title: String
-    let subtitle: String
-    let emptyTitle: String
-    let emptySubtitle: String
+private enum TimelineZoom {
+    case overview   // full day, compressed
+    case focused    // ~6h window centred on current time / first run
+}
+
+private struct DayTimelineView: View {
     let targetDay: PlanTargetDay
     let runs: [LabRun]
     let completedStepIDs: Set<String>
     let activeTimers: [ActiveLabTimer]
+    let projects: [Project]
     let addAtTime: (String) -> Void
-    let toggleStep: (String) -> Void
-    let startTimer: (LabRun) -> Void
+    let startTimer: (LabRun, LabStep?, Int?) -> Void
     let showDataCard: (LabRun) -> Void
     let openBenchMode: (LabRun) -> Void
     let removeRun: (LabRun) -> Void
+    let onUpdateRun: (LabRun, String, String?) -> Void  // (run, newTitle, newProject)
+    let pauseTimer: (ActiveLabTimer) -> Void
+    let resumeTimer: (ActiveLabTimer) -> Void
+    let stopTimer: (ActiveLabTimer) -> Void
 
-    private var sorted: [LabRun] { runs.sortedByTimeLabel() }
+    @State private var zoom: TimelineZoom = .overview
+    @State private var showRunDetail: LabRun? = nil
+    @State private var showAddSheet = false
+
+    // Hour-row heights — different for each mode
+    private var hourH: CGFloat {
+        zoom == .overview ? 88 : 240  // overview: 88pt/hr (44pt per 30min), focused: 240pt/hr (4pt per min)
+    }
+
+    private var displayHours: [Int] { Array(0...23) }
+
+    // Group hours into segments: consecutive empty hours are collapsed
+    private var hourSegments: [(startHour: Int, endHour: Int, hasRuns: Bool)] {
+        var segments: [(Int, Int, Bool)] = []
+        var currentStart = 0
+        var currentHasRuns = !runs.filter { hourFromLabel($0.timeLabel) == 0 }.isEmpty
+
+        for hour in 1...23 {
+            let hasRuns = !runs.filter { hourFromLabel($0.timeLabel) == hour }.isEmpty
+            if hasRuns != currentHasRuns {
+                segments.append((currentStart, hour - 1, currentHasRuns))
+                currentStart = hour
+                currentHasRuns = hasRuns
+            }
+        }
+        segments.append((currentStart, 23, currentHasRuns))
+        return segments
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.title2.bold())
-                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
-            }
-            .padding(16)
-            .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
-
-            TimelineInsertButton(timeLabel: suggestedTime(before: sorted.first, after: nil), title: runs.isEmpty ? "新建第一个实验" : "在最前面新建") {
-                addAtTime(suggestedTime(before: sorted.first, after: nil))
-            }
-
-            if sorted.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: "calendar.badge.plus").font(.title2).foregroundStyle(.teal)
-                    Text(emptyTitle).font(.headline)
-                    Text(emptySubtitle).font(.subheadline).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            // Header row - only + button and zoom button
+            HStack {
+                Button {
+                    showAddSheet = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.teal)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
-            } else {
-                ForEach(Array(sorted.enumerated()), id: \.element.id) { index, run in
-                    RunCard(
-                        run: run,
-                        completedStepIDs: completedStepIDs,
-                        activeTimer: activeTimers.first { $0.runID == run.id },
-                        toggleStep: toggleStep,
-                        startTimer: { startTimer(run) },
-                        showDataCard: { showDataCard(run) },
-                        openBenchMode: { openBenchMode(run) },
-                        removeRun: (run.id.hasPrefix("import-") || run.id.hasPrefix("manual-") || run.id.hasPrefix("carryover-")) ? { removeRun(run) } : nil
-                    )
-                    TimelineInsertButton(
-                        timeLabel: suggestedTime(before: sorted[safe: index + 1], after: run),
-                        title: index == sorted.count - 1 ? "在后面新建" : "在两个实验之间新建"
-                    ) {
-                        addAtTime(suggestedTime(before: sorted[safe: index + 1], after: run))
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        zoom = (zoom == .overview) ? .focused : .overview
+                    }
+                } label: {
+                    Label(zoom == .overview ? "聚焦当前" : "全天览", systemImage: zoom == .overview ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.teal.opacity(0.12), in: Capsule())
+                        .foregroundStyle(.teal)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            Divider().padding(.horizontal, 16)
+
+            // Dynamic timeline layout with collapsed empty segments
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(spacing: 0) {
+                        ForEach(hourSegments, id: \.startHour) { segment in
+                            if segment.hasRuns {
+                                // Show all hours in this segment
+                                ForEach(segment.startHour...segment.endHour, id: \.self) { hour in
+                                    DynamicHourBlock(
+                                        hour: hour,
+                                        runs: runs.filter { hourFromLabel($0.timeLabel) == hour },
+                                        zoom: zoom,
+                                        targetDay: targetDay,
+                                        completedStepIDs: completedStepIDs,
+                                        activeTimers: activeTimers,
+                                        projects: projects,
+                                        onTapRun: { showRunDetail = $0 },
+                                        onStart: startTimer,
+                                        onCard: showDataCard,
+                                        onBench: openBenchMode,
+                                        onRemove: { run in
+                                            if canRemove(run) { removeRun(run) }
+                                        },
+                                        onPauseTimer: pauseTimer,
+                                        onResumeTimer: resumeTimer,
+                                        onStopTimer: stopTimer
+                                    )
+                                    .id(hour)
+                                }
+                            } else {
+                                // Collapsed empty segment
+                                CollapsedEmptySegment(
+                                    startHour: segment.startHour,
+                                    endHour: segment.endHour
+                                )
+                                .id(segment.startHour)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 20)  // Reduced padding
+                }
+                .onAppear {
+                    // Auto-scroll to first experiment or current hour
+                    if let firstRun = runs.first, let h = hourFromLabel(firstRun.timeLabel) {
+                        // Scroll to first experiment
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation {
+                                proxy.scrollTo(h, anchor: .top)
+                            }
+                        }
+                    } else if targetDay == .today {
+                        // No experiments, scroll to current hour
+                        let currentHour = Calendar.current.component(.hour, from: Date())
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation {
+                                proxy.scrollTo(currentHour, anchor: .top)
+                            }
+                        }
+                    }
+                }
+                .onChange(of: zoom) { _, _ in
+                    // Re-scroll when zoom changes
+                    if let firstRun = runs.first, let h = hourFromLabel(firstRun.timeLabel) {
+                        withAnimation {
+                            proxy.scrollTo(h, anchor: .top)
+                        }
                     }
                 }
             }
-        }
-    }
 
-    private func suggestedTime(before nextRun: LabRun?, after previousRun: LabRun?) -> String {
-        if let prev = previousRun, let prevMin = minutes(prev.timeLabel) {
-            if let next = nextRun, let nextMin = minutes(next.timeLabel), nextMin > prevMin {
-                return timeLabel(prevMin + max(15, (nextMin - prevMin) / 2))
+            // Empty state hint
+            if runs.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar.badge.plus").foregroundStyle(.teal)
+                    Text("点击左上角 + 添加实验")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
             }
-            return timeLabel(min(prevMin + 60, 23 * 60 + 30))
         }
-        if let next = nextRun, let nextMin = minutes(next.timeLabel) {
-            return timeLabel(max(nextMin - 60, 7 * 60))
+        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+        .onChange(of: showAddSheet) { _, newValue in
+            if newValue {
+                addAtTime(suggestedTimeForNewRun())
+                showAddSheet = false
+            }
         }
-        return targetDay == .today ? "09:00" : "09:30"
+        .sheet(item: $showRunDetail) { run in
+            RunDetailSheet(
+                run: run,
+                targetDay: targetDay,
+                completedStepIDs: completedStepIDs,
+                activeTimer: activeTimers.first { $0.runID == run.id },
+                projects: projects,
+                startTimer: { step, customMin in startTimer(run, step, customMin) },
+                showDataCard: { showDataCard(run) },
+                openBenchMode: { openBenchMode(run) },
+                removeRun: canRemove(run) ? { removeRun(run) } : nil,
+                updateTime: { newTime in
+                    // Time update needs to be handled by recreating the run
+                },
+                updateRun: { newTitle, newProject in
+                    onUpdateRun(run, newTitle, newProject)
+                    showRunDetail = nil
+                },
+                updateSteps: { newSteps in
+                    onUpdateRun(run, run.title, run.projectID)
+                },
+                pauseTimer: { pauseTimer($0) },
+                resumeTimer: { resumeTimer($0) },
+                stopTimer: { stopTimer($0) }
+            )
+        }
     }
 
-    private func minutes(_ label: String) -> Int? {
+    private func suggestedTimeForNewRun() -> String {
+        if targetDay == .today {
+            let now = Date()
+            let cal = Calendar.current
+            let h = cal.component(.hour, from: now)
+            let m = cal.component(.minute, from: now)
+            let rounded = ((m + 14) / 15) * 15
+            if rounded >= 60 {
+                return String(format: "%02d:00", min(h + 1, 23))
+            }
+            return String(format: "%02d:%02d", h, rounded)
+        }
+        return "09:00"
+    }
+
+    private func canRemove(_ run: LabRun) -> Bool {
+        run.id.hasPrefix("import-") || run.id.hasPrefix("manual-") || run.id.hasPrefix("carryover-")
+    }
+
+    private func hourFromLabel(_ label: String) -> Int? {
         let parts = label.split(separator: ":")
-        guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) else { return nil }
-        return h * 60 + m
+        guard parts.count == 2, let h = Int(parts[0]) else { return nil }
+        return h
     }
 
-    private func timeLabel(_ totalMin: Int) -> String {
-        let c = min(max(totalMin, 0), 23 * 60 + 59)
-        return String(format: "%02d:%02d", c / 60, c % 60)
+    private func minuteFromLabel(_ label: String) -> Int {
+        let parts = label.split(separator: ":")
+        guard parts.count == 2, let m = Int(parts[1]) else { return 0 }
+        return m
+    }
+
+    private func roundToNearest15(_ label: String) -> String {
+        let parts = label.split(separator: ":")
+        guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) else { return label }
+        let rounded = (m / 15) * 15
+        return String(format: "%02d:%02d", h, rounded)
     }
 }
 
-private struct TimelineInsertButton: View {
-    let timeLabel: String
-    let title: String
-    let action: () -> Void
+private struct HourRow: View {
+    let hour: Int
+    let hourH: CGFloat
+    let isCurrentHour: Bool
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: "plus.circle.fill").font(.title3).foregroundStyle(.teal)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.subheadline.weight(.semibold))
-                    Text(timeLabel).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                }
-                Spacer()
+        ZStack(alignment: .topLeading) {
+            // Hour label
+            Text(String(format: "%02d:00", hour))
+                .font(.system(size: 11, weight: isCurrentHour ? .bold : .regular, design: .monospaced))
+                .foregroundStyle(isCurrentHour ? Color.teal : Color.secondary.opacity(0.7))
+                .frame(width: 48, alignment: .trailing)
+                .offset(y: -7)
+
+            // Tick line
+            Rectangle()
+                .fill(isCurrentHour ? Color.teal.opacity(0.35) : Color.secondary.opacity(0.12))
+                .frame(height: 1)
+                .padding(.leading, 56)
+                .offset(y: 0)
+
+            // Half-hour sub-tick
+            if hourH >= 40 {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.07))
+                    .frame(height: 1)
+                    .padding(.leading, 56)
+                    .offset(y: hourH / 2)
             }
-            .padding(12)
-            .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .frame(height: hourH)
+    }
+}
+
+private struct CurrentTimeIndicator: View {
+    let displayHours: [Int]
+    let hourH: CGFloat
+
+    private var nowFraction: CGFloat {
+        let cal = Calendar.current
+        let h = cal.component(.hour, from: Date())
+        let m = cal.component(.minute, from: Date())
+        guard let firstH = displayHours.first, displayHours.contains(h) else { return -1 }
+        return CGFloat(h - firstH) * hourH + CGFloat(m) / 60.0 * hourH
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: Date(), by: 60)) { _ in
+            let y = nowFraction
+            if y >= 0 {
+                HStack(spacing: 0) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+                        .padding(.leading, 52)
+                    Rectangle()
+                        .fill(Color.red.opacity(0.7))
+                        .frame(height: 1.5)
+                }
+                .offset(y: y)
+            }
+        }
+    }
+}
+
+private struct RunChip: View {
+    let run: LabRun
+    let completedStepIDs: Set<String>
+    let activeTimer: ActiveLabTimer?
+    let projects: [Project]
+    let onTap: () -> Void
+    let onStart: () -> Void
+    let onCard: () -> Void
+    let onRemove: (() -> Void)?
+
+    private var projectName: String? {
+        guard let pid = run.projectID else { return nil }
+        return projects.first { $0.id == pid }?.name
+    }
+    private var projectColor: Color? {
+        guard let pid = run.projectID, let hex = projects.first(where: { $0.id == pid })?.colorHex else { return nil }
+        return Color(hex: hex)
+    }
+
+    private var doneCount: Int { run.steps.filter { completedStepIDs.contains($0.id) }.count }
+    private var chipColor: Color {
+        switch run.area {
+        case .cell: return .teal
+        case .cloning: return .blue
+        case .blot: return .purple
+        default: return .gray
+        }
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(chipColor)
+                    .frame(width: 3)
+                    .frame(height: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(run.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text("\(run.timeLabel) · \(doneCount)/\(run.steps.count)步").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(run.area.rawValue)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(chipColor.opacity(0.15), in: Capsule())
+                        .foregroundStyle(chipColor)
+                    if let name = projectName, let color = projectColor {
+                        Text(name)
+                            .font(.caption2)
+                            .foregroundStyle(color)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(chipColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
     }
 }
 
-// MARK: - Tomorrow Plan View
+// MARK: - Expanded Run Card (for focused mode)
 
-private struct TomorrowPlanView: View {
-    let runs: [LabRun]
+private struct ExpandedRunCard: View {
+    let run: LabRun
     let completedStepIDs: Set<String>
-    let removeRun: (String) -> Void
-    let showDataCard: (LabRun) -> Void
-    let addAtTime: (String) -> Void
+    let activeTimer: ActiveLabTimer?
+    let projects: [Project]
+    let onTap: () -> Void
+    let onStart: (LabStep?) -> Void
+    let onCard: () -> Void
+    let onBench: () -> Void
+    let onRemove: (() -> Void)?
+    let onPause: (() -> Void)?
+    let onResume: (() -> Void)?
+    let onStop: (() -> Void)?
+
+    private var projectName: String? {
+        guard let pid = run.projectID else { return nil }
+        return projects.first { $0.id == pid }?.name
+    }
+    private var projectColor: Color? {
+        guard let pid = run.projectID, let hex = projects.first(where: { $0.id == pid })?.colorHex else { return nil }
+        return Color(hex: hex)
+    }
+
+    private var doneCount: Int { run.steps.filter { completedStepIDs.contains($0.id) }.count }
+    private var chipColor: Color {
+        switch run.area {
+        case .cell: return .teal
+        case .cloning: return .blue
+        case .blot: return .purple
+        default: return .gray
+        }
+    }
 
     var body: some View {
-        EditableScheduleTimelineView(
-            title: "明天", subtitle: runs.isEmpty ? "为明天安排实验" : "\(runs.count) 个实验已安排",
-            emptyTitle: "还没有明日实验", emptySubtitle: "从 09:30 开始新建第一个实验。",
-            targetDay: .tomorrow, runs: runs, completedStepIDs: completedStepIDs, activeTimers: [],
-            addAtTime: addAtTime, toggleStep: { _ in }, startTimer: { _ in },
-            showDataCard: showDataCard, openBenchMode: { _ in },
-            removeRun: { run in removeRun(run.id) }
-        )
+        VStack(alignment: .leading, spacing: 10) {
+            // Header - title tappable only
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(chipColor)
+                    .frame(width: 4, height: 44)
+                Button(action: onTap) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(run.title).font(.headline).lineLimit(1)
+                        HStack(spacing: 4) {
+                            Text(run.timeLabel).font(.caption.monospacedDigit().weight(.semibold)).foregroundStyle(chipColor)
+                            Text("·").foregroundStyle(.secondary)
+                            Text(run.protocolName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(run.area.rawValue)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(chipColor.opacity(0.15), in: Capsule())
+                        .foregroundStyle(chipColor)
+                    if let name = projectName, let color = projectColor {
+                        Text(name)
+                            .font(.caption2)
+                            .foregroundStyle(color)
+                            .lineLimit(1)
+                    }
+                }
+            }
+
+            // Steps list
+            VStack(spacing: 6) {
+                ForEach(run.steps) { step in
+                    HStack(spacing: 8) {
+                        Image(systemName: completedStepIDs.contains(step.id) ? "checkmark.circle.fill" : "circle")
+                            .font(.body)
+                            .foregroundStyle(completedStepIDs.contains(step.id) ? chipColor : .secondary.opacity(0.5))
+                            .frame(width: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(step.title)
+                                .font(.body.weight(.medium))
+                                .strikethrough(completedStepIDs.contains(step.id))
+                            Text(step.detail)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                        Spacer()
+                        if let dur = step.durationMinutes {
+                            Button {
+                                onStart(step)
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "timer").font(.caption2)
+                                    Text("\(dur)m").font(.caption.weight(.semibold))
+                                }
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(Color.blue.opacity(0.12), in: Capsule())
+                                .foregroundStyle(.blue)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            // Timer display
+            if let timer = activeTimer {
+                TimelineView(.periodic(from: Date(), by: 1)) { _ in
+                    HStack {
+                        Image(systemName: timer.isPaused ? "pause.circle.fill" : (timer.isFinished ? "bell.fill" : "timer"))
+                            .foregroundStyle(timer.isPaused ? .orange : (timer.isFinished ? .orange : chipColor))
+                        Text(timer.stepTitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        Spacer()
+                        if timer.isPaused {
+                            Text("已暂停")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.orange)
+                        } else {
+                            Text(timer.isFinished ? "到点" : formatDuration(timer.remainingSeconds))
+                                .font(.caption.monospacedDigit().weight(.bold))
+                                .foregroundStyle(timer.isFinished ? .orange : chipColor)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        timer.isPaused ? Color.orange.opacity(0.12) :
+                        (timer.isFinished ? Color.orange.opacity(0.12) : chipColor.opacity(0.08)),
+                        in: RoundedRectangle(cornerRadius: 6)
+                    )
+                }
+                // Pause/Resume/Stop mini controls
+                if !timer.isFinished {
+                    HStack(spacing: 8) {
+                        if timer.isPaused {
+                            Button(action: { onResume?() }) {
+                                Label("继续", systemImage: "play.fill")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.mini)
+                            .tint(chipColor)
+                        } else {
+                            Button(action: { onPause?() }) {
+                                Label("暂停", systemImage: "pause.fill")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                            .tint(chipColor)
+                        }
+                        Button(action: { onStop?() }) {
+                            Label("取消", systemImage: "stop.fill")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .tint(.red)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(chipColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(chipColor.opacity(0.2), lineWidth: 1.5))
+        .contextMenu {
+            if let remove = onRemove {
+                Button(role: .destructive, action: remove) {
+                    Label("删除实验", systemImage: "trash")
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Run Detail Sheet (from timeline chip tap)
+
+private struct RunDetailSheet: View {
+    let run: LabRun
+    let targetDay: PlanTargetDay
+    let completedStepIDs: Set<String>
+    let activeTimer: ActiveLabTimer?
+    let projects: [Project]
+    let startTimer: (LabStep?, Int?) -> Void  // (step, customMinutes)
+    let showDataCard: () -> Void
+    let openBenchMode: () -> Void
+    let removeRun: (() -> Void)?
+    let updateTime: (String) -> Void
+    let updateRun: ((String, String?) -> Void)?  // (title, projectID)
+    let updateSteps: (([LabStep]) -> Void)?
+    let pauseTimer: ((ActiveLabTimer) -> Void)?
+    let resumeTimer: ((ActiveLabTimer) -> Void)?
+    let stopTimer: ((ActiveLabTimer) -> Void)?
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var editedTitle = ""
+    @State private var selectedProjectID: String? = nil
+    @State private var selectedHour = 9
+    @State private var selectedMinute = 0
+    @State private var editableSteps: [LabStep] = []
+    @State private var editingStep: LabStep?
+    @State private var showCustomTimer = false
+    @State private var pendingStep: LabStep?
+    @State private var customHours = 0
+    @State private var customMins = 5
+    @State private var customSecs = 0
+    @State private var showingTimePicker = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Info + Time in one row
+                    HStack(alignment: .top, spacing: 16) {
+                        // Info
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("实验信息")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            TextField("实验名称", text: $editedTitle)
+                                .font(.body.weight(.semibold))
+                            if !projects.isEmpty {
+                                Picker("项目", selection: $selectedProjectID) {
+                                    Text("无项目").tag(nil as String?)
+                                    ForEach(projects) { project in
+                                        HStack {
+                                            Circle()
+                                                .fill(Color(hex: project.colorHex))
+                                                .frame(width: 8, height: 8)
+                                            Text(project.name)
+                                        }
+                                        .tag(project.id as String?)
+                                    }
+                                }
+                                .font(.subheadline)
+                                .pickerStyle(.menu)
+                                .tint(.secondary)
+                            }
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
+                        .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+
+                        // Time
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("时间")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Button {
+                                let parts = run.timeLabel.split(separator: ":")
+                                if parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) {
+                                    selectedHour = h
+                                    selectedMinute = m
+                                }
+                                showingTimePicker = true
+                            } label: {
+                                Text(run.timeLabel)
+                                    .font(.title2.monospacedDigit().weight(.bold))
+                                    .foregroundStyle(.teal)
+                            }
+                            .buttonStyle(.plain)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
+                        .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+                    }
+
+                    // Steps — centered, large, editable
+                    VStack(spacing: 12) {
+                        ForEach(Array(editableSteps.enumerated()), id: \.element.id) { index, step in
+                            HStack(spacing: 14) {
+                                // Step number
+                                Text("\(index + 1)")
+                                    .font(.title2.monospacedDigit().weight(.bold))
+                                    .foregroundStyle(.teal)
+                                    .frame(width: 28)
+
+                                // Step content
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(step.title)
+                                        .font(.headline)
+                                        .strikethrough(completedStepIDs.contains(step.id))
+                                    if !step.detail.isEmpty {
+                                        Text(highlightedStepDetail(step.detail))
+                                            .font(.subheadline)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                // Timer button
+                                if let dur = step.durationMinutes {
+                                    Button {
+                                        pendingStep = step
+                                        let totalSecs = dur * 60
+                                        customHours = totalSecs / 3600
+                                        customMins = (totalSecs % 3600) / 60
+                                        customSecs = totalSecs % 60
+                                        showCustomTimer = true
+                                    } label: {
+                                        HStack(spacing: 3) {
+                                            Image(systemName: "timer").font(.caption2)
+                                            Text("\(dur)m").font(.caption.weight(.semibold))
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.blue.opacity(0.12), in: Capsule())
+                                        .foregroundStyle(.blue)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                // Edit button
+                                Button {
+                                    editingStep = step
+                                } label: {
+                                    Image(systemName: "slider.horizontal.3")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(14)
+                            .background(Color.labInset, in: RoundedRectangle(cornerRadius: 10))
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    editableSteps.removeAll { $0.id == step.id }
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
+                            }
+                        }
+
+                        // Add step button
+                        Button {
+                            let newStep = LabStep(
+                                id: "step-\(UUID().uuidString)",
+                                title: "新步骤",
+                                detail: "",
+                                durationMinutes: nil,
+                                isCarryOver: false,
+                                variableRefs: [],
+                                reagents: []
+                            )
+                            editableSteps.append(newStep)
+                            editingStep = newStep
+                        } label: {
+                            Label("添加步骤", systemImage: "plus.circle.fill")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.teal)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                    }
+                    .padding(16)
+                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
+                    // Active timer
+                    if let timer = activeTimer {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("运行中的计时器")
+                                .font(.headline)
+                            TimelineView(.periodic(from: Date(), by: 1)) { _ in
+                                VStack(spacing: 10) {
+                                    HStack {
+                                        Image(systemName: "timer")
+                                            .foregroundStyle(timer.isFinished ? .orange : .teal)
+                                        Text(timer.stepTitle).font(.caption).foregroundStyle(.secondary)
+                                        Spacer()
+                                        if timer.isPaused {
+                                            Text("已暂停")
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(.orange)
+                                        }
+                                        Text(timer.isFinished ? "到点" : formatDuration(timer.remainingSeconds))
+                                            .font(.title3.monospacedDigit().weight(.bold))
+                                            .foregroundStyle(timer.isFinished ? .orange : timer.isPaused ? .orange : .teal)
+                                    }
+                                    HStack(spacing: 12) {
+                                        if timer.isPaused {
+                                            Button { resumeTimer?(timer) } label: {
+                                                Label("继续", systemImage: "play.fill").frame(maxWidth: .infinity)
+                                            }
+                                            .buttonStyle(.borderedProminent).tint(.teal)
+                                        } else if !timer.isFinished {
+                                            Button { pauseTimer?(timer) } label: {
+                                                Label("暂停", systemImage: "pause.fill").frame(maxWidth: .infinity)
+                                            }
+                                            .buttonStyle(.bordered).tint(.teal)
+                                        }
+                                        Button { stopTimer?(timer) } label: {
+                                            Label("取消", systemImage: "stop.fill").frame(maxWidth: .infinity)
+                                        }
+                                        .buttonStyle(.bordered).tint(.red)
+                                    }
+                                }
+                                .padding(12)
+                                .background(timer.isFinished ? Color.orange.opacity(0.12) : timer.isPaused ? Color.orange.opacity(0.08) : Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+                            }
+                        }
+                        .padding(16)
+                        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding(16)
+            }
+            .background(Color.labBackground)
+            .navigationTitle(editedTitle.isEmpty ? run.title : editedTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("保存") {
+                        let title = editedTitle.trimmingCharacters(in: .whitespaces)
+                        if !title.isEmpty {
+                            updateRun?(title, selectedProjectID)
+                        }
+                        if editableSteps != run.steps {
+                            updateSteps?(editableSteps)
+                        }
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        showDataCard()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+            }
+            .sheet(isPresented: $showingTimePicker) {
+                TimePickerSheet(
+                    hour: $selectedHour,
+                    minute: $selectedMinute,
+                    onApply: {
+                        updateTime(String(format: "%02d:%02d", selectedHour, selectedMinute))
+                        showingTimePicker = false
+                    }
+                )
+            }
+            .sheet(item: $editingStep) { step in
+                StepEditorSheet(
+                    step: step,
+                    onSave: { updated in
+                        if let idx = editableSteps.firstIndex(where: { $0.id == updated.id }) {
+                            editableSteps[idx] = updated
+                        }
+                    }
+                )
+            }
+            .sheet(isPresented: $showCustomTimer) {
+                CustomTimerSheet(
+                    hours: $customHours,
+                    mins: $customMins,
+                    secs: $customSecs,
+                    onStart: {
+                        let totalMins = customHours * 60 + customMins + (customSecs >= 30 ? 1 : 0)
+                        startTimer(pendingStep, max(totalMins, 1))
+                        showCustomTimer = false
+                    }
+                )
+            }
+        }
+        .onAppear {
+            editedTitle = run.title
+            selectedProjectID = run.projectID
+            editableSteps = run.steps
+            let parts = run.timeLabel.split(separator: ":")
+            if parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) {
+                selectedHour = h
+                selectedMinute = m
+            }
+        }
+    }
+
+    private func highlightedStepDetail(_ text: String) -> AttributedString {
+        var attributed = AttributedString(text)
+        attributed.foregroundColor = .secondary
+
+        // Pattern: number + optional space + unit
+        // Matches: "1 次", "37 C", "4 ml", "5%", "10 min", etc.
+        let pattern = #"(\d+\.?\d*)\s*([A-Za-z°µμ%次]+)"#
+
+        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+            let nsString = text as NSString
+            let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsString.length))
+
+            for match in matches.reversed() {
+                if let range = Range(match.range, in: text) {
+                    if let attrRange = Range(range, in: attributed) {
+                        attributed[attrRange].foregroundColor = .teal
+                        attributed[attrRange].font = .subheadline.weight(.semibold).monospacedDigit()
+                    }
+                }
+            }
+        }
+
+        return attributed
+    }
+}
+
+// MARK: - Custom Timer Sheet
+
+private struct CustomTimerSheet: View {
+    @Binding var hours: Int
+    @Binding var mins: Int
+    @Binding var secs: Int
+    let onStart: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Text("自定义计时时长")
+                    .font(.headline)
+
+                HStack(spacing: 0) {
+                    Picker("时", selection: $hours) {
+                        ForEach(0..<24) { h in
+                            Text("\(h)").tag(h)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(width: 60)
+
+                    Text("时")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28)
+
+                    Picker("分", selection: $mins) {
+                        ForEach(0..<60) { m in
+                            Text("\(m)").tag(m)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(width: 60)
+
+                    Text("分")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28)
+
+                    Picker("秒", selection: $secs) {
+                        ForEach(0..<60) { s in
+                            Text("\(s)").tag(s)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(width: 60)
+
+                    Text("秒")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28)
+                }
+                .frame(height: 160)
+
+                Button {
+                    onStart()
+                    dismiss()
+                } label: {
+                    Label("开始计时", systemImage: "timer")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(.teal)
+            }
+            .padding(24)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.height(300)])
+    }
+}
+
+// MARK: - Time Picker Sheet
+
+private struct TimePickerSheet: View {
+    @Binding var hour: Int
+    @Binding var minute: Int
+    let onApply: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                HStack(spacing: 0) {
+                    Picker("时", selection: $hour) {
+                        ForEach(0..<24) { h in Text(String(format: "%02d", h)).tag(h) }
+                    }
+                    .pickerStyle(.wheel).frame(width: 80)
+                    Text(":").font(.title2.bold())
+                    Picker("分", selection: $minute) {
+                        ForEach([0, 15, 30, 45], id: \.self) { m in Text(String(format: "%02d", m)).tag(m) }
+                    }
+                    .pickerStyle(.wheel).frame(width: 80)
+                }
+                .frame(height: 180)
+
+                Button {
+                    onApply()
+                    dismiss()
+                } label: {
+                    Text("应用").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent).tint(.teal).padding(.horizontal)
+            }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+        }
+        .presentationDetents([.height(280)])
+    }
+}
+
+// MARK: - Step Editor Sheet
+
+private struct StepEditorSheet: View {
+    let step: LabStep
+    let onSave: (LabStep) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var title: String
+    @State private var detail: String
+    @State private var durationMinutes: Int?
+    @State private var hasDuration: Bool
+    @State private var durValue = 5
+
+    init(step: LabStep, onSave: @escaping (LabStep) -> Void) {
+        self.step = step
+        self.onSave = onSave
+        _title = State(initialValue: step.title)
+        _detail = State(initialValue: step.detail)
+        _durationMinutes = State(initialValue: step.durationMinutes)
+        _hasDuration = State(initialValue: step.durationMinutes != nil)
+        if let d = step.durationMinutes { _durValue = State(initialValue: d) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("步骤名称", text: $title)
+                TextField("详细说明（可选）", text: $detail)
+                Toggle("需要计时", isOn: $hasDuration)
+                if hasDuration {
+                    HStack {
+                        Text("时长（分钟）")
+                        Spacer()
+                        TextField("分钟", value: $durValue, format: .number)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 72)
+                            .keyboardType(.numberPad)
+                    }
+                }
+            }
+            .navigationTitle("编辑步骤")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        var updated = step
+                        updated.title = title
+                        updated.detail = detail
+                        updated.durationMinutes = hasDuration ? durValue : nil
+                        onSave(updated)
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1177,7 +2479,12 @@ private struct StepRow: View {
     }
 }
 
-// MARK: - Bench Mode
+// MARK: - Bench Mode (Electronic Protocol Display)
+
+private enum BenchLayoutMode {
+    case full
+    case compact
+}
 
 private struct BenchModeView: View {
     let run: LabRun
@@ -1185,116 +2492,925 @@ private struct BenchModeView: View {
     let activeTimer: ActiveLabTimer?
     let toggleStep: (String) -> Void
     let completeRun: () -> Void
-    let startTimer: () -> Void
+    let startTimer: (Int?) -> Void  // customMinutes
+    let pauseTimer: () -> Void
+    let resumeTimer: () -> Void
+    let stopTimer: () -> Void
+    let showDataCard: () -> Void
     @Environment(\.dismiss) private var dismiss
 
+    @AppStorage("preferencesLargeBenchMode") private var largeBenchMode = true
+    @AppStorage("preferencesCompactCards") private var compactCards = false
+    @AppStorage("preferencesFontScale") private var fontScale = 1.0
+
+    @State private var stepIndex: Int
+    @State private var showingCompleteAlert = false
+    @State private var showTimerFlash = false
+    @State private var flashOpacity = 0.8
+    @State private var layoutMode: BenchLayoutMode
+    @State private var showCustomTimer = false
+    @State private var customHours = 0
+    @State private var customMins = 5
+    @State private var customSecs = 0
+
+    init(run: LabRun, completedStepIDs: Set<String>, activeTimer: ActiveLabTimer?, toggleStep: @escaping (String) -> Void, completeRun: @escaping () -> Void, startTimer: @escaping (Int?) -> Void, pauseTimer: @escaping () -> Void, resumeTimer: @escaping () -> Void, stopTimer: @escaping () -> Void, showDataCard: @escaping () -> Void) {
+        self.run = run
+        self.completedStepIDs = completedStepIDs
+        self.activeTimer = activeTimer
+        self.toggleStep = toggleStep
+        self.completeRun = completeRun
+        self.startTimer = startTimer
+        self.pauseTimer = pauseTimer
+        self.resumeTimer = resumeTimer
+        self.stopTimer = stopTimer
+        self.showDataCard = showDataCard
+        let firstIncomplete = run.steps.firstIndex { !completedStepIDs.contains($0.id) } ?? (run.steps.count - 1)
+        _stepIndex = State(initialValue: firstIncomplete)
+        let prefCompact = UserDefaults.standard.bool(forKey: "preferencesCompactCards")
+        _layoutMode = State(initialValue: prefCompact ? .compact : .full)
+    }
+
+    private var steps: [LabStep] { run.steps }
+    private var currentStep: LabStep { steps[safe: stepIndex] ?? steps[steps.count - 1] }
+    private var isCurrentStepDone: Bool { completedStepIDs.contains(currentStep.id) }
     private var doneCount: Int { run.steps.filter { completedStepIDs.contains($0.id) }.count }
-    private var currentStep: LabStep? { run.steps.first { !completedStepIDs.contains($0.id) } ?? run.steps.last }
-    private var isRunComplete: Bool { doneCount == run.steps.count }
+    private var isRunComplete: Bool { doneCount == steps.count }
+    private var chipColor: Color {
+        switch run.area {
+        case .cell: return .teal
+        case .cloning: return .blue
+        case .blot: return .purple
+        default: return .gray
+        }
+    }
 
     var body: some View {
         ZStack {
             Color.labBackground.ignoresSafeArea()
-            VStack(spacing: 18) {
+
+            VStack(spacing: 0) {
+                // MARK: - Top Bar
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(run.timeLabel).font(.headline.monospacedDigit()).foregroundStyle(.secondary)
-                        Text(run.title).font(.largeTitle.bold()).lineLimit(2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(run.title)
+                            .font(.title3.bold())
+                            .lineLimit(1)
+                        Text("\(run.area.rawValue) · \(run.timeLabel)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill").font(.system(size: 34))
+                    // Layout toggle
+                    Button {
+                        withAnimation(.spring(response: 0.35)) {
+                            layoutMode = layoutMode == .full ? .compact : .full
+                        }
+                        compactCards = layoutMode == .compact
+                    } label: {
+                        Image(systemName: layoutMode == .full ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(chipColor)
+                            .frame(width: 40, height: 40)
+                            .background(chipColor.opacity(0.1), in: Circle())
                     }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("退出实验台模式")
+                    .buttonStyle(.plain)
+                    // Share button
+                    Button(action: showDataCard) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(chipColor)
+                            .frame(width: 44, height: 44)
+                            .background(chipColor.opacity(0.1), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    // Close button
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 10)
+
+                // MARK: - Progress Bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.secondary.opacity(0.15))
+                            .frame(height: 4)
+                        Capsule()
+                            .fill(chipColor)
+                            .frame(width: max(4, geo.size.width * CGFloat(doneCount) / CGFloat(max(1, steps.count))), height: 4)
+                            .animation(.spring(response: 0.4), value: doneCount)
+                    }
+                }
+                .frame(height: 4)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+
+                if layoutMode == .full {
+
+                    Spacer()
+
+                // MARK: - Step Number
+                Text("步骤 \(stepIndex + 1)")
+                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .foregroundStyle(chipColor)
+                    .padding(.bottom, 4)
+
+                // MARK: - Step Title (hero)
+                Text(currentStep.title)
+                    .font(.system(size: 42, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.6)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 12)
+
+                // MARK: - Step Detail
+                Text(currentStep.detail)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 16)
+
+                // MARK: - Reagents Panel (full mode)
+                if !currentStep.reagents.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("本步试剂")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ForEach(currentStep.reagents) { reagent in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(chipColor.opacity(0.35))
+                                    .frame(width: 5, height: 5)
+                                Text(reagent.name)
+                                    .font(.caption)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                reagentAmountView(reagent)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(chipColor.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(chipColor.opacity(0.08), lineWidth: 1))
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 12)
                 }
 
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        Text("当前步骤").font(.headline).foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(doneCount)/\(run.steps.count)").font(.headline.monospacedDigit())
+                // MARK: - Timer Display
+                if let dur = currentStep.durationMinutes {
+                    if let timer = activeTimer, timer.stepTitle == currentStep.title {
+                        VStack(spacing: 16) {
+                            if timer.isPaused {
+                                // Paused countdown display
+                                VStack(spacing: 4) {
+                                    Text(formatDuration(timer.remainingSeconds))
+                                        .font(.system(size: 48, weight: .bold, design: .monospaced))
+                                        .foregroundStyle(.orange)
+                                    Text("已暂停")
+                                        .font(.caption)
+                                        .foregroundStyle(.orange.opacity(0.6))
+                                }
+                            } else {
+                                CircularTimerView(
+                                    totalSeconds: dur * 60,
+                                    endsAt: timer.endsAt
+                                )
+                            }
+
+                            HStack(spacing: 16) {
+                                if timer.isPaused {
+                                    Button { resumeTimer() } label: {
+                                        Label("继续", systemImage: "play.fill")
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(chipColor)
+                                } else {
+                                    Button { pauseTimer() } label: {
+                                        Label("暂停", systemImage: "pause.fill")
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(chipColor)
+                                }
+
+                                Button { stopTimer() } label: {
+                                    Label("取消", systemImage: "stop.fill")
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.red)
+                            }
+                        }
+                        .padding(.bottom, 12)
+                    } else if !isCurrentStepDone {
+                        Button {
+                            if let dur = currentStep.durationMinutes {
+                                let totalSecs = dur * 60
+                                customHours = totalSecs / 3600
+                                customMins = (totalSecs % 3600) / 60
+                                customSecs = totalSecs % 60
+                            } else {
+                                customHours = 0
+                                customMins = 5
+                                customSecs = 0
+                            }
+                            showCustomTimer = true
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "play.fill")
+                                Text("启动计时 \(dur) min")
+                            }
+                            .font(.title3.weight(.semibold))
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 14)
+                            .background(chipColor, in: Capsule())
+                            .foregroundStyle(.white)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.bottom, 12)
                     }
-                    if let step = currentStep {
-                        Text(step.title).font(.system(size: 34, weight: .bold)).minimumScaleFactor(0.75)
-                        Text(step.detail).font(.title3).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        if let dur = step.durationMinutes {
-                            Label("\(dur) min", systemImage: "timer")
-                                .font(.title3.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 9)
-                                .background(Color.blue.opacity(0.12), in: Capsule()).foregroundStyle(.blue)
+                }
+
+                Spacer()
+
+                // MARK: - Step Indicator Dots
+                HStack(spacing: 10) {
+                    ForEach(Array(steps.enumerated()), id: \.element.id) { idx, step in
+                        Button {
+                            withAnimation(.spring(response: 0.35)) {
+                                stepIndex = idx
+                            }
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        idx == stepIndex ? chipColor :
+                                        completedStepIDs.contains(step.id) ? chipColor.opacity(0.35) :
+                                        Color.secondary.opacity(0.2)
+                                    )
+                                    .frame(width: idx == stepIndex ? 36 : 28, height: idx == stepIndex ? 36 : 28)
+                                    .animation(.spring(response: 0.35), value: stepIndex)
+
+                                if completedStepIDs.contains(step.id) {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(.white)
+                                } else if idx == stepIndex {
+                                    Text("\(idx + 1)")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(idx > doneCount) // can't skip ahead
+                    }
+                }
+                .padding(.bottom, 24)
+
+                // MARK: - Gesture hints
+                HStack(spacing: 24) {
+                    Image(systemName: "chevron.left")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(stepIndex > 0 ? chipColor : .secondary.opacity(0.2))
+                        .onTapGesture {
+                            if stepIndex > 0 {
+                                withAnimation(.spring(response: 0.35)) { stepIndex -= 1 }
+                            }
+                        }
+
+                    Button {
+                        if isRunComplete {
+                            showingCompleteAlert = true
+                        } else {
+                            if !isCurrentStepDone {
+                                toggleStep(currentStep.id)
+                            }
+                            // auto-advance to next incomplete step
+                            let nextIdx = steps.firstIndex { !completedStepIDs.contains($0.id) }
+                            if let next = nextIdx {
+                                withAnimation(.spring(response: 0.35)) {
+                                    stepIndex = next
+                                }
+                            } else {
+                                // all done - check if run is complete now
+                                if doneCount + 1 >= steps.count {
+                                    showingCompleteAlert = true
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(
+                            isRunComplete ? "完成实验" : "完成此步骤",
+                            systemImage: isRunComplete ? "checkmark.seal.fill" : "checkmark.circle.fill"
+                        )
+                        .font(.title3.weight(.bold))
+                        .frame(maxWidth: .infinity, minHeight: 58)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .tint(isRunComplete ? .teal : chipColor)
+
+                    Image(systemName: "chevron.right")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(stepIndex < steps.count - 1 ? chipColor : .secondary.opacity(0.2))
+                        .onTapGesture {
+                            if stepIndex < steps.count - 1 {
+                                withAnimation(.spring(response: 0.35)) { stepIndex += 1 }
+                            }
+                        }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+
+                // Sub-action: jump to incomplete
+                if !isRunComplete && doneCount > 0 && stepIndex > doneCount {
+                    Button {
+                        withAnimation(.spring(response: 0.35)) {
+                            stepIndex = doneCount
+                        }
+                    } label: {
+                        Label("回到当前步骤", systemImage: "arrow.uturn.backward")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 6)
+                }
+                } else {
+                    compactModeLayout
+                }
+            }
+            .padding(.bottom, 20)
+
+            // Timer finished flash overlay
+            if showTimerFlash {
+                Color.white
+                    .ignoresSafeArea()
+                    .opacity(flashOpacity)
+                    .allowsHitTesting(false)
+                    .onAppear {
+                        withAnimation(.easeOut(duration: 0.3)) { flashOpacity = 0 }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            showTimerFlash = false
+                            flashOpacity = 0.8
+                        }
+                    }
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 50)
+                .onEnded { value in
+                    if value.translation.width < -80, stepIndex < steps.count - 1 {
+                        withAnimation(.spring(response: 0.35)) { stepIndex += 1 }
+                    } else if value.translation.width > 80, stepIndex > 0 {
+                        withAnimation(.spring(response: 0.35)) { stepIndex -= 1 }
+                    }
+                }
+        )
+        .onChange(of: activeTimer?.isFinished ?? false) { _, isFinished in
+            if isFinished {
+                showTimerFlash = true
+                flashOpacity = 0.8
+            }
+        }
+        .sheet(isPresented: $showCustomTimer) {
+            CustomTimerSheet(
+                hours: $customHours,
+                mins: $customMins,
+                secs: $customSecs,
+                onStart: {
+                    let totalMins = customHours * 60 + customMins + (customSecs >= 30 ? 1 : 0)
+                    startTimer(max(totalMins, 1))
+                    showCustomTimer = false
+                }
+            )
+        }
+        .alert("实验完成", isPresented: $showingCompleteAlert) {
+            Button("生成结果卡片") { completeRun() }
+            Button("稍后处理", role: .cancel) { dismiss() }
+        } message: {
+            Text("所有步骤已完成，是否生成结果卡片？")
+        }
+    }
+
+    // MARK: - Reagent Amount View
+    private func reagentAmountView(_ reagent: StepReagent) -> some View {
+        let amount = reagent.calculateAmount(variables: [:])
+        if let val = amount {
+            return AnyView(
+                Text("\(formatCalcAmount(val)) \(reagent.unit)")
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(chipColor)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(chipColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+            )
+        } else {
+            return AnyView(
+                Text("\(reagent.amountExpression) \(reagent.unit)")
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(chipColor)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(chipColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+            )
+        }
+    }
+
+    // MARK: - Compact Mode Layout
+    private var compactModeLayout: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                // Timer Dashboard
+                if let timer = activeTimer {
+                    compactTimerDashboard(timer)
+                } else if let dur = currentStep.durationMinutes, !isCurrentStepDone {
+                    Button {
+                        let totalSecs = dur * 60
+                        customHours = totalSecs / 3600
+                        customMins = (totalSecs % 3600) / 60
+                        customSecs = totalSecs % 60
+                        showCustomTimer = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "play.fill")
+                            Text("启动计时 \(dur) min — \(currentStep.title)")
+                        }
+                        .font(.headline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 18)
+                        .background(chipColor, in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                // Step list
+                VStack(spacing: 0) {
+                    ForEach(Array(steps.enumerated()), id: \.element.id) { idx, step in
+                        compactStepRow(idx: idx, step: step)
+                        if idx < steps.count - 1 {
+                            Divider().padding(.leading, 44)
                         }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
-                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(chipColor.opacity(0.12), lineWidth: 1))
 
-                if let timer = activeTimer {
-                    BenchTimerPanel(timer: timer)
-                } else {
-                    Button(action: startTimer) {
-                        Label("为当前实验启动计时", systemImage: "play.fill")
-                            .font(.title3.weight(.bold)).frame(maxWidth: .infinity, minHeight: 62)
+                // Bottom action
+                HStack(spacing: 16) {
+                    // Step nav
+                    Button {
+                        if stepIndex > 0 {
+                            withAnimation(.spring(response: 0.35)) { stepIndex -= 1 }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.title2.weight(.semibold))
                     }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
-                }
+                    .buttonStyle(.bordered)
+                    .tint(stepIndex > 0 ? chipColor : .secondary)
+                    .disabled(stepIndex == 0)
 
-                VStack(spacing: 10) {
-                    ForEach(run.steps) { step in
-                        BenchStepRow(step: step, isDone: completedStepIDs.contains(step.id), toggle: { toggleStep(step.id) })
+                    Button {
+                        if isRunComplete {
+                            showingCompleteAlert = true
+                        } else {
+                            if !isCurrentStepDone {
+                                toggleStep(currentStep.id)
+                            }
+                            let nextIdx = steps.firstIndex { !completedStepIDs.contains($0.id) }
+                            if let next = nextIdx {
+                                withAnimation(.spring(response: 0.35)) { stepIndex = next }
+                            } else {
+                                if doneCount + 1 >= steps.count {
+                                    showingCompleteAlert = true
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(
+                            isRunComplete ? "完成实验" : "完成此步骤",
+                            systemImage: isRunComplete ? "checkmark.seal.fill" : "checkmark.circle.fill"
+                        )
+                        .font(.headline.weight(.bold))
+                        .frame(maxWidth: .infinity, minHeight: 56)
                     }
-                }
+                    .buttonStyle(.borderedProminent)
+                    .tint(isRunComplete ? .teal : chipColor)
 
-                Button(action: completeRun) {
-                    Label(isRunComplete ? "生成结果卡片" : "完成本实验并生成卡片",
-                          systemImage: isRunComplete ? "rectangle.on.rectangle.angled" : "checkmark.seal.fill")
-                        .font(.headline).frame(maxWidth: .infinity, minHeight: 58)
+                    Button {
+                        if stepIndex < steps.count - 1 {
+                            withAnimation(.spring(response: 0.35)) { stepIndex += 1 }
+                        }
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.title2.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(stepIndex < steps.count - 1 ? chipColor : .secondary)
+                    .disabled(stepIndex >= steps.count - 1)
                 }
-                .buttonStyle(.borderedProminent).controlSize(.large)
-
-                Spacer(minLength: 0)
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
         }
     }
-}
 
-private struct BenchTimerPanel: View {
-    let timer: ActiveLabTimer
-    var body: some View {
-        TimelineView(.periodic(from: Date(), by: 1)) { _ in
-            VStack(spacing: 8) {
-                Text(timer.stepTitle).font(.headline).foregroundStyle(.secondary)
-                Text(timer.isFinished ? "完成" : formatDuration(timer.remainingSeconds))
-                    .font(.system(size: 56, weight: .bold, design: .monospaced))
-                    .foregroundStyle(timer.isFinished ? .orange : .teal)
-                    .contentTransition(.numericText())
-            }
-            .frame(maxWidth: .infinity).padding(20)
-            .background(timer.isFinished ? Color.orange.opacity(0.12) : Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
-        }
-    }
-}
-
-private struct BenchStepRow: View {
-    let step: LabStep
-    let isDone: Bool
-    let toggle: () -> Void
-
-    var body: some View {
-        Button(action: toggle) {
-            HStack(spacing: 14) {
-                Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 30)).foregroundStyle(isDone ? .teal : .secondary).frame(width: 44, height: 44)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(step.title).font(.headline).strikethrough(isDone)
-                    Text(step.detail).font(.subheadline).foregroundStyle(.secondary)
-                }
+    // MARK: - Compact Timer Dashboard
+    private func compactTimerDashboard(_ timer: ActiveLabTimer) -> some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: timer.isPaused ? "pause.circle.fill" : (timer.isFinished ? "bell.fill" : "timer"))
+                    .font(.title2)
+                    .foregroundStyle(timer.isPaused || timer.isFinished ? .orange : chipColor)
+                Text(timer.stepTitle)
+                    .font(.headline)
+                    .lineLimit(1)
                 Spacer()
+                if timer.isPaused {
+                    Text("已暂停")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.orange)
+                } else if timer.isFinished {
+                    Text("到点")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.orange)
+                } else {
+                    TimelineView(.periodic(from: Date(), by: 1)) { _ in
+                        Text(formatDuration(timer.remainingSeconds))
+                            .font(.title.monospacedDigit().weight(.bold))
+                            .foregroundStyle(chipColor)
+                    }
+                }
             }
-            .padding(14)
-            .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+
+            if !timer.isFinished {
+                HStack(spacing: 12) {
+                    if timer.isPaused {
+                        Button { resumeTimer() } label: {
+                            Label("继续", systemImage: "play.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(chipColor)
+                    } else {
+                        Button { pauseTimer() } label: {
+                            Label("暂停", systemImage: "pause.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(chipColor)
+                    }
+                    Button { stopTimer() } label: {
+                        Label("取消", systemImage: "stop.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                }
+            }
+        }
+        .padding(14)
+        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(chipColor.opacity(0.15), lineWidth: 1))
+    }
+
+    // MARK: - Compact Step Row
+    private func compactStepRow(idx: Int, step: LabStep) -> some View {
+        let isDone = completedStepIDs.contains(step.id)
+        let isCurrent = idx == stepIndex
+        let hasActiveTimer = activeTimer?.stepTitle == step.title && !(activeTimer?.isFinished ?? true)
+
+        return Button {
+            if idx <= doneCount {
+                withAnimation(.spring(response: 0.35)) { stepIndex = idx }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top, spacing: 10) {
+                    // Status icon
+                    ZStack {
+                        Circle()
+                            .fill(
+                                isDone ? chipColor.opacity(0.3) :
+                                isCurrent ? chipColor :
+                                Color.secondary.opacity(0.15)
+                            )
+                            .frame(width: 30, height: 30)
+                        if isDone {
+                            Image(systemName: "checkmark")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.white)
+                        } else {
+                            Text("\(idx + 1)")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(isCurrent ? .white : .secondary)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(step.title)
+                            .font(.body.weight(.medium))
+                            .strikethrough(isDone)
+                            .foregroundStyle(isDone ? .secondary : .primary)
+                        Text(step.detail)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                    if let dur = step.durationMinutes {
+                        if hasActiveTimer {
+                            TimelineView(.periodic(from: Date(), by: 1)) { _ in
+                                Text(formatDuration(activeTimer?.remainingSeconds ?? dur * 60))
+                                    .font(.caption.monospacedDigit().weight(.bold))
+                                    .foregroundStyle(.orange)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Color.orange.opacity(0.12), in: Capsule())
+                            }
+                        } else {
+                            Label("\(dur)m", systemImage: "timer")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.blue)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Color.blue.opacity(0.1), in: Capsule())
+                        }
+                    }
+                }
+
+                // Reagents
+                if !step.reagents.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(step.reagents) { reagent in
+                            reagentCompactPill(reagent)
+                        }
+                    }
+                    .padding(.leading, 40)
+                }
+            }
+            .padding(12)
+            .background(
+                isCurrent
+                    ? chipColor.opacity(0.05)
+                    : Color.clear
+            )
+            .overlay(alignment: .leading) {
+                if isCurrent {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(chipColor)
+                        .frame(width: 3)
+                        .padding(.vertical, 8)
+                        .padding(.leading, 2)
+                }
+            }
         }
         .buttonStyle(.plain)
+        .disabled(idx > doneCount)
+    }
+
+    // MARK: - Compact Reagent Pill
+    private func reagentCompactPill(_ reagent: StepReagent) -> some View {
+        let amount = reagent.calculateAmount(variables: [:])
+        return AnyView(
+            HStack(spacing: 2) {
+                Text(reagent.name)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if let val = amount {
+                    Text("\(formatCalcAmount(val))\(reagent.unit)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(chipColor)
+                } else {
+                    Text("\(reagent.amountExpression)\(reagent.unit)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(chipColor)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(chipColor.opacity(0.08), in: Capsule())
+        )
+    }
+
+    private func formatCalcAmount(_ value: Double) -> String {
+        if value >= 100 { return String(format: "%.0f", value) }
+        if value >= 10 { return String(format: "%.1f", value) }
+        return String(format: "%.2f", value)
+    }
+}
+
+// MARK: - Circular Timer View
+
+private struct CircularTimerView: View {
+    let totalSeconds: Int
+    let endsAt: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: Date(), by: 1)) { _ in
+            let remaining = max(0, Int(endsAt.timeIntervalSinceNow.rounded()))
+            let isFinished = remaining == 0
+            let progress = totalSeconds > 0 ? Double(remaining) / Double(totalSeconds) : 0.0
+
+            VStack(spacing: 12) {
+                ZStack {
+                    // Background ring
+                    Circle()
+                        .stroke(Color.secondary.opacity(0.12), lineWidth: 12)
+                        .frame(width: 140, height: 140)
+
+                    // Progress ring
+                    Circle()
+                        .trim(from: 0, to: min(1, progress))
+                        .stroke(
+                            isFinished ? Color.orange : Color.teal,
+                            style: StrokeStyle(lineWidth: 12, lineCap: .round)
+                        )
+                        .frame(width: 140, height: 140)
+                        .rotationEffect(.degrees(-90))
+
+                    // Time text
+                    Text(isFinished ? "完成" : formatDuration(remaining))
+                        .font(.system(size: 36, weight: .bold, design: .monospaced))
+                        .foregroundStyle(isFinished ? .orange : .teal)
+                        .contentTransition(.numericText())
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Collapsed Empty Segment
+
+private struct CollapsedEmptySegment: View {
+    let startHour: Int
+    let endHour: Int
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 8) {
+                Text(String(format: "%02d:00", startHour))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary.opacity(0.5))
+                    .frame(width: 48, alignment: .trailing)
+
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.08))
+                    .frame(height: 1)
+
+                Text(String(format: "%02d:00", endHour))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary.opacity(0.5))
+            }
+            .padding(.horizontal, 8)
+
+            Text("· · ·")
+                .font(.caption2)
+                .foregroundStyle(.secondary.opacity(0.3))
+        }
+        .frame(height: 32)
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Dynamic Hour Block
+
+private struct DynamicHourBlock: View {
+    let hour: Int
+    let runs: [LabRun]
+    let zoom: TimelineZoom
+    let targetDay: PlanTargetDay
+    let completedStepIDs: Set<String>
+    let activeTimers: [ActiveLabTimer]
+    let projects: [Project]
+    let onTapRun: (LabRun) -> Void
+    let onStart: (LabRun, LabStep?, Int?) -> Void
+    let onCard: (LabRun) -> Void
+    let onBench: (LabRun) -> Void
+    let onRemove: (LabRun) -> Void
+    let onPauseTimer: ((ActiveLabTimer) -> Void)?
+    let onResumeTimer: ((ActiveLabTimer) -> Void)?
+    let onStopTimer: ((ActiveLabTimer) -> Void)?
+
+    private var isCurrentHour: Bool {
+        targetDay == .today && Calendar.current.component(.hour, from: Date()) == hour
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Hour label
+            HStack(spacing: 0) {
+                Text(String(format: "%02d:00", hour))
+                    .font(.system(size: 11, weight: isCurrentHour ? .bold : .regular, design: .monospaced))
+                    .foregroundStyle(isCurrentHour ? Color.teal : Color.secondary.opacity(0.7))
+                    .frame(width: 48, alignment: .trailing)
+
+                Rectangle()
+                    .fill(isCurrentHour ? Color.teal.opacity(0.35) : Color.secondary.opacity(0.12))
+                    .frame(height: 1)
+                    .padding(.leading, 8)
+            }
+
+            // Experiment content area
+            if runs.isEmpty {
+                // Empty space - minimal
+                Color.clear
+                    .frame(height: zoom == .overview ? 24 : 32)
+            } else {
+                // Has experiments - dynamic layout
+                VStack(spacing: zoom == .overview ? 8 : 12) {
+                    ForEach(runs.sorted(by: { minuteFrom($0.timeLabel) < minuteFrom($1.timeLabel) })) { run in
+                        HStack(spacing: 0) {
+                            // Time indicator for this run
+                            Text(run.timeLabel)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.secondary.opacity(0.6))
+                                .frame(width: 48, alignment: .trailing)
+
+                            // Run card
+                            if zoom == .overview {
+                                RunChip(
+                                    run: run,
+                                    completedStepIDs: completedStepIDs,
+                                    activeTimer: activeTimers.first { $0.runID == run.id },
+                                    projects: projects,
+                                    onTap: { onTapRun(run) },
+                                    onStart: { onStart(run, nil, nil) },
+                                    onCard: { onCard(run) },
+                                    onRemove: { onRemove(run) }
+                                )
+                                .padding(.leading, 8)
+                            } else {
+                                let timerForRun = activeTimers.first { $0.runID == run.id }
+                                ExpandedRunCard(
+                                    run: run,
+                                    completedStepIDs: completedStepIDs,
+                                    activeTimer: timerForRun,
+                                    projects: projects,
+                                    onTap: { onBench(run) },
+                                    onStart: { step in onStart(run, step, nil) },
+                                    onCard: { onCard(run) },
+                                    onBench: { onBench(run) },
+                                    onRemove: { onRemove(run) },
+                                    onPause: { if let t = timerForRun { onPauseTimer?(t) } },
+                                    onResume: { if let t = timerForRun { onResumeTimer?(t) } },
+                                    onStop: { if let t = timerForRun { onStopTimer?(t) } }
+                                )
+                                .padding(.leading, 8)
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 8)
+                .padding(.trailing, 8)
+            }
+
+            // Current time indicator (if applicable)
+            if targetDay == .today && isCurrentHour {
+                CurrentTimeIndicatorInHour()
+            }
+        }
+    }
+
+    private func minuteFrom(_ label: String) -> Int {
+        let parts = label.split(separator: ":")
+        guard parts.count == 2, let m = Int(parts[1]) else { return 0 }
+        return m
+    }
+}
+
+private struct CurrentTimeIndicatorInHour: View {
+    var body: some View {
+        TimelineView(.periodic(from: Date(), by: 60)) { _ in
+            let minute = Calendar.current.component(.minute, from: Date())
+            HStack(spacing: 0) {
+                Text(String(format: ":%02d", minute))
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.red)
+                    .frame(width: 48, alignment: .trailing)
+
+                HStack(spacing: 0) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 6, height: 6)
+                        .padding(.leading, 5)
+                    Rectangle()
+                        .fill(Color.red.opacity(0.7))
+                        .frame(height: 1.5)
+                }
+            }
+        }
     }
 }
 
