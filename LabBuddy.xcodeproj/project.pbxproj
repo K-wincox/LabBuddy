@@ -7,29 +7,29 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0F7B0D7E109941AFB0F4FF6A /* ProtocolLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0211A4C59EC43409D8A49F7 /* ProtocolLibraryView.swift */; };
 		6A1B01012C00100100F10001 /* LabBuddyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B00012C00100100F10001 /* LabBuddyApp.swift */; };
 		6A1B01022C00100100F10001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B00022C00100100F10001 /* ContentView.swift */; };
-		0F7B0D7E109941AFB0F4FF6A /* ProtocolLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0211A4C59EC43409D8A49F7 /* ProtocolLibraryView.swift */; };
-		BD6975F2C2AC416BB6B8AB14 /* CalculatorToolkitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01057C50522F4E4CA0CA7A84 /* CalculatorToolkitView.swift */; };
-		8E689A33B58F4E7CA0A824A5 /* MyWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293A9279F0E94CB492BF0ED1 /* MyWorkspaceView.swift */; };
-		BD7006106FD14C458414A758 /* DataCardSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7179305919074B4F8C096B67 /* DataCardSheet.swift */; };
 		6A1B01032C00100100F10001 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B00032C00100100F10001 /* Models.swift */; };
 		6A1B01042C00100100F10001 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B00042C00100100F10001 /* SampleData.swift */; };
 		6A1B01052C00100100F10001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6A1B00052C00100100F10001 /* Assets.xcassets */; };
+		8E689A33B58F4E7CA0A824A5 /* MyWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293A9279F0E94CB492BF0ED1 /* MyWorkspaceView.swift */; };
+		BD6975F2C2AC416BB6B8AB14 /* CalculatorToolkitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01057C50522F4E4CA0CA7A84 /* CalculatorToolkitView.swift */; };
+		BD7006106FD14C458414A758 /* DataCardSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7179305919074B4F8C096B67 /* DataCardSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		6A1B00012C00100100F10001 /* LabBuddyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabBuddyApp.swift; sourceTree = "<group>"; };
-		6A1B00022C00100100F10001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		C0211A4C59EC43409D8A49F7 /* ProtocolLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocolLibraryView.swift; sourceTree = "<group>"; };
 		01057C50522F4E4CA0CA7A84 /* CalculatorToolkitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculatorToolkitView.swift; sourceTree = "<group>"; };
 		293A9279F0E94CB492BF0ED1 /* MyWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyWorkspaceView.swift; sourceTree = "<group>"; };
-		7179305919074B4F8C096B67 /* DataCardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataCardSheet.swift; sourceTree = "<group>"; };
+		6A1B00012C00100100F10001 /* LabBuddyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabBuddyApp.swift; sourceTree = "<group>"; };
+		6A1B00022C00100100F10001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		6A1B00032C00100100F10001 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		6A1B00042C00100100F10001 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
 		6A1B00052C00100100F10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6A1B00062C00100100F10001 /* Preview Content */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Preview Content"; sourceTree = "<group>"; };
 		6A1B00072C00100100F10001 /* LabBuddy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LabBuddy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7179305919074B4F8C096B67 /* DataCardSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataCardSheet.swift; sourceTree = "<group>"; };
+		C0211A4C59EC43409D8A49F7 /* ProtocolLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocolLibraryView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -104,7 +104,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1630;
-				LastUpgradeCheck = 1630;
+				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					6A1B04012C00100100F10001 = {
 						CreatedOnToolsVersion = 16.3;
@@ -193,6 +193,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = N3P24UN9XA;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -216,6 +217,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -255,6 +257,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = N3P24UN9XA;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -271,6 +274,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -290,6 +294,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -319,6 +324,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

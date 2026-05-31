@@ -319,10 +319,11 @@ private struct TodayView: View {
                                     selectedProjectFilter = nil
                                 }
                                 ForEach(projects) { project in
+                                    let projectColor = Color(hex: project.colorHex)
                                     FilterChip(
                                         title: project.name,
                                         isSelected: selectedProjectFilter == project.id,
-                                        accentColor: Color(hex: project.colorHex)
+                                        accentColor: projectColor
                                     ) {
                                         selectedProjectFilter = selectedProjectFilter == project.id ? nil : project.id
                                     }
@@ -359,34 +360,63 @@ private struct TodayView: View {
                             TimerDock(activeTimers: activeTimers, stopTimer: stopTimer)
                         }
 
-                        DayTimelineView(
-                            targetDay: .today,
-                            runs: todayRuns,
-                            completedStepIDs: completedStepIDs,
-                            activeTimers: activeTimers,
-                            projects: projects,
-                            addAtTime: { timeLabel in
-                                scheduleRequest = ScheduleRequest(targetDay: .today, timeLabel: timeLabel)
-                            },
-                            startTimer: { run, step, customMin in startTimer(for: run, step: step, customMinutes: customMin) },
-                            showDataCard: { selectedDataCardRun = $0 },
-                            openBenchMode: { focusedRun = $0 },
-                            removeRun: { run in
-                                if run.id.hasPrefix("import-") {
-                                    importedRuns.removeAll { $0.id == run.id }
-                                    hapticFeedback(.medium)
+                        if todayRuns.isEmpty {
+                            // Empty state for today
+                            VStack(spacing: 16) {
+                                Spacer()
+                                Image(systemName: "calendar.badge.clock")
+                                    .font(.system(size: 64))
+                                    .foregroundStyle(.teal.opacity(0.3))
+                                Text("今天还没有安排实验")
+                                    .font(.title3.weight(.semibold))
+                                Text("点击下方按钮添加今天的实验计划")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                Button {
+                                    scheduleRequest = ScheduleRequest(targetDay: .today, timeLabel: "09:00")
+                                } label: {
+                                    Label("添加实验", systemImage: "plus.circle.fill")
+                                        .font(.headline)
+                                        .padding(.horizontal, 24)
+                                        .padding(.vertical, 12)
                                 }
-                            },
-                            onUpdateRun: { run, newTitle, newProject in
-                                if let index = importedRuns.firstIndex(where: { $0.id == run.id }) {
-                                    importedRuns[index].title = newTitle
-                                    importedRuns[index].projectID = newProject
-                                }
-                            },
-                            pauseTimer: pauseTimer,
-                            resumeTimer: resumeTimer,
-                            stopTimer: stopTimer
-                        )
+                                .buttonStyle(.borderedProminent)
+                                .tint(.teal)
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 32)
+                        } else {
+                            DayTimelineView(
+                                targetDay: .today,
+                                runs: todayRuns,
+                                completedStepIDs: completedStepIDs,
+                                activeTimers: activeTimers,
+                                projects: projects,
+                                addAtTime: { timeLabel in
+                                    scheduleRequest = ScheduleRequest(targetDay: .today, timeLabel: timeLabel)
+                                },
+                                startTimer: { run, step, customMin in startTimer(for: run, step: step, customMinutes: customMin) },
+                                showDataCard: { selectedDataCardRun = $0 },
+                                openBenchMode: { focusedRun = $0 },
+                                removeRun: { run in
+                                    if run.id.hasPrefix("import-") {
+                                        importedRuns.removeAll { $0.id == run.id }
+                                        hapticFeedback(.medium)
+                                    }
+                                },
+                                onUpdateRun: { run, newTitle, newProject in
+                                    if let index = importedRuns.firstIndex(where: { $0.id == run.id }) {
+                                        importedRuns[index].title = newTitle
+                                        importedRuns[index].projectID = newProject
+                                    }
+                                },
+                                pauseTimer: pauseTimer,
+                                resumeTimer: resumeTimer,
+                                stopTimer: stopTimer
+                            )
+                        }
 
                         Button {
                             showEndDayConfirm = true
@@ -400,29 +430,58 @@ private struct TodayView: View {
                         .buttonStyle(.plain)
 
                     case .tomorrow:
-                        DayTimelineView(
-                            targetDay: .tomorrow,
-                            runs: tomorrowRuns.sortedByTimeLabel(),
-                            completedStepIDs: completedStepIDs,
-                            activeTimers: [],
-                            projects: projects,
-                            addAtTime: { timeLabel in
-                                scheduleRequest = ScheduleRequest(targetDay: .tomorrow, timeLabel: timeLabel)
-                            },
-                            startTimer: { _, _, _ in },
-                            showDataCard: { selectedDataCardRun = $0 },
-                            openBenchMode: { _ in },
-                            removeRun: { run in tomorrowRuns.removeAll { $0.id == run.id }; hapticFeedback(.medium) },
-                            onUpdateRun: { run, newTitle, newProject in
-                                if let index = tomorrowRuns.firstIndex(where: { $0.id == run.id }) {
-                                    tomorrowRuns[index].title = newTitle
-                                    tomorrowRuns[index].projectID = newProject
+                        if tomorrowRuns.isEmpty {
+                            // Empty state for tomorrow
+                            VStack(spacing: 16) {
+                                Spacer()
+                                Image(systemName: "calendar.badge.plus")
+                                    .font(.system(size: 64))
+                                    .foregroundStyle(.teal.opacity(0.3))
+                                Text("明天还没有计划")
+                                    .font(.title3.weight(.semibold))
+                                Text("提前规划明天的实验安排")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                Button {
+                                    scheduleRequest = ScheduleRequest(targetDay: .tomorrow, timeLabel: "09:00")
+                                } label: {
+                                    Label("添加明天的实验", systemImage: "plus.circle.fill")
+                                        .font(.headline)
+                                        .padding(.horizontal, 24)
+                                        .padding(.vertical, 12)
                                 }
-                            },
-                            pauseTimer: { _ in },
-                            resumeTimer: { _ in },
-                            stopTimer: { _ in }
-                        )
+                                .buttonStyle(.borderedProminent)
+                                .tint(.teal)
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 32)
+                        } else {
+                            DayTimelineView(
+                                targetDay: .tomorrow,
+                                runs: tomorrowRuns.sortedByTimeLabel(),
+                                completedStepIDs: completedStepIDs,
+                                activeTimers: [],
+                                projects: projects,
+                                addAtTime: { timeLabel in
+                                    scheduleRequest = ScheduleRequest(targetDay: .tomorrow, timeLabel: timeLabel)
+                                },
+                                startTimer: { _, _, _ in },
+                                showDataCard: { selectedDataCardRun = $0 },
+                                openBenchMode: { _ in },
+                                removeRun: { run in tomorrowRuns.removeAll { $0.id == run.id }; hapticFeedback(.medium) },
+                                onUpdateRun: { run, newTitle, newProject in
+                                    if let index = tomorrowRuns.firstIndex(where: { $0.id == run.id }) {
+                                        tomorrowRuns[index].title = newTitle
+                                        tomorrowRuns[index].projectID = newProject
+                                    }
+                                },
+                                pauseTimer: { _ in },
+                                resumeTimer: { _ in },
+                                stopTimer: { _ in }
+                            )
+                        }
                     }
                 }
                 .padding(18)

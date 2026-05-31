@@ -10,6 +10,7 @@ enum SampleData {
             status: "进行中",
             protocolName: "293T routine passage",
             scaledVolumeLabel: "T25 flask / 1:4",
+            projectID: nil,
             steps: [
                 LabStep(id: "pbs", title: "PBS 清洗", detail: "轻柔冲洗 1 次", durationMinutes: nil, isCarryOver: false),
                 LabStep(id: "trypsin", title: "胰酶消化", detail: "37 C 观察细胞变圆", durationMinutes: 3, isCarryOver: false),
@@ -24,6 +25,7 @@ enum SampleData {
             status: "待开始",
             protocolName: "Plasmid miniprep",
             scaledVolumeLabel: "6 tubes",
+            projectID: nil,
             steps: [
                 LabStep(id: "spin1", title: "菌液离心", detail: "12000 rpm 收集菌体", durationMinutes: 1, isCarryOver: false),
                 LabStep(id: "lysis", title: "裂解反应", detail: "加入 P2 后轻柔颠倒混匀", durationMinutes: 5, isCarryOver: false),
@@ -38,6 +40,7 @@ enum SampleData {
             status: "顺延占位",
             protocolName: "WB transfer + block",
             scaledVolumeLabel: "1 mini gel",
+            projectID: nil,
             steps: [
                 LabStep(id: "transfer-check", title: "检查转膜", detail: "确认 Marker 与膜方向", durationMinutes: nil, isCarryOver: true),
                 LabStep(id: "block", title: "封闭", detail: "5% milk / TBST", durationMinutes: 60, isCarryOver: true)
@@ -116,14 +119,42 @@ enum SampleData {
                 ProtocolIngredient(name: "Pen/Strep", standardAmount: 2, unit: "ml")
             ],
             steps: [
-                LabStep(id: "medium-warm", title: "预温基础培养基", detail: "37 C 水浴，使用前确认无沉淀", durationMinutes: 8, isCarryOver: false, variableRefs: ["t_warm"]),
-                LabStep(id: "medium-mix", title: "加入血清与双抗", detail: "按比例加入后轻柔颠倒混匀", durationMinutes: nil, isCarryOver: false, variableRefs: ["V_total", "f_serum"]),
-                LabStep(id: "medium-label", title: "标记批次", detail: "写明日期、配方与操作者", durationMinutes: nil, isCarryOver: false)
+                LabStep(
+                    id: "medium-warm",
+                    title: "预温基础培养基",
+                    detail: "37°C 水浴，使用前确认无沉淀",
+                    durationMinutes: 8,
+                    isCarryOver: false,
+                    variableRefs: ["t_warm"],
+                    reagents: [
+                        StepReagent(name: "DMEM high glucose", amountExpression: "V_total * 0.9", unit: "ml")
+                    ]
+                ),
+                LabStep(
+                    id: "medium-mix",
+                    title: "加入血清与双抗",
+                    detail: "按比例加入后轻柔颠倒混匀",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    variableRefs: ["V_total", "f_serum"],
+                    reagents: [
+                        StepReagent(name: "FBS", amountExpression: "总体积 * 血清比例", unit: "ml"),
+                        StepReagent(name: "Pen/Strep", amountExpression: "V_total * 0.01", unit: "ml")
+                    ]
+                ),
+                LabStep(
+                    id: "medium-label",
+                    title: "标记批次",
+                    detail: "写明日期、配方与操作者",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    reagents: []
+                )
             ],
             variables: [
-                ProtocolVariable(symbol: "V_total", name: "总体积", value: 200, unit: "ml", formula: "baseVolume"),
-                ProtocolVariable(symbol: "f_serum", name: "血清比例", value: 10, unit: "%", formula: "FBS / V_total"),
-                ProtocolVariable(symbol: "t_warm", name: "预温时间", value: 8, unit: "min", formula: "step.duration")
+                ProtocolVariable(symbol: "V_total", name: "总体积", baseValue: 200, unit: "ml", isScalable: true, minValue: 50, maxValue: 500),
+                ProtocolVariable(symbol: "f_serum", name: "血清比例", baseValue: 10, unit: "%", isScalable: false, minValue: 5, maxValue: 20),
+                ProtocolVariable(symbol: "t_warm", name: "预温时间", baseValue: 8, unit: "min", isScalable: false, minValue: 5, maxValue: 15)
             ],
             source: ProtocolSource(type: .sop, title: "细胞培养室常规 SOP", confidence: 0.92)
         ),
@@ -142,14 +173,27 @@ enum SampleData {
                 ProtocolIngredient(name: "ddH2O", standardAmount: 9, unit: "ul")
             ],
             steps: [
-                LabStep(id: "ligation-thaw", title: "冰上融化组分", detail: "buffer 完全融化后短暂离心", durationMinutes: nil, isCarryOver: false),
-                LabStep(id: "ligation-mix", title: "配置连接体系", detail: "酶最后加入，轻柔混匀", durationMinutes: nil, isCarryOver: false, variableRefs: ["V_reaction", "ratio_insert"]),
-                LabStep(id: "ligation-incubate", title: "连接孵育", detail: "16 C 或室温按策略孵育", durationMinutes: 25, isCarryOver: false, variableRefs: ["t_ligation"])
+                LabStep(id: "ligation-thaw", title: "冰上融化组分", detail: "buffer 完全融化后短暂离心", durationMinutes: nil, isCarryOver: false, reagents: []),
+                LabStep(
+                    id: "ligation-mix",
+                    title: "配置连接体系",
+                    detail: "酶最后加入，轻柔混匀",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    variableRefs: ["V_reaction"],
+                    reagents: [
+                        StepReagent(name: "Vector", amountExpression: "2", unit: "ul"),
+                        StepReagent(name: "Insert", amountExpression: "6", unit: "ul"),
+                        StepReagent(name: "10x Ligase buffer", amountExpression: "V_reaction * 0.1", unit: "ul"),
+                        StepReagent(name: "T4 Ligase", amountExpression: "1", unit: "ul"),
+                        StepReagent(name: "ddH2O", amountExpression: "V_reaction - 11", unit: "ul")
+                    ]
+                ),
+                LabStep(id: "ligation-incubate", title: "连接孵育", detail: "16°C 或室温按策略孵育", durationMinutes: 25, isCarryOver: false, variableRefs: ["t_ligation"], reagents: [])
             ],
             variables: [
-                ProtocolVariable(symbol: "V_reaction", name: "反应总体积", value: 20, unit: "ul", formula: "sum(components)"),
-                ProtocolVariable(symbol: "ratio_insert", name: "插入片段比例", value: 3, unit: "x", formula: "Insert / Vector"),
-                ProtocolVariable(symbol: "t_ligation", name: "连接时间", value: 25, unit: "min", formula: "step.duration")
+                ProtocolVariable(symbol: "V_reaction", name: "反应总体积", baseValue: 20, unit: "ul", isScalable: true, minValue: 10, maxValue: 50),
+                ProtocolVariable(symbol: "t_ligation", name: "连接时间", baseValue: 25, unit: "min", isScalable: false, minValue: 10, maxValue: 60)
             ],
             source: ProtocolSource(type: .kitManual, title: "T4 Ligase kit quick protocol", confidence: 0.88)
         ),
@@ -168,14 +212,28 @@ enum SampleData {
                 ProtocolIngredient(name: "APS/TEMED", standardAmount: 0.1, unit: "ml")
             ],
             steps: [
-                LabStep(id: "gel-clean", title: "清洁玻璃板", detail: "确认无漏液、无残胶", durationMinutes: nil, isCarryOver: false),
-                LabStep(id: "gel-pour", title: "灌制分离胶", detail: "APS/TEMED 最后加入后立即灌胶", durationMinutes: nil, isCarryOver: false, variableRefs: ["gel_percent", "V_gel"]),
-                LabStep(id: "gel-polymerize", title: "聚合等待", detail: "异丙醇压平胶面", durationMinutes: 30, isCarryOver: false, variableRefs: ["t_poly"])
+                LabStep(id: "gel-clean", title: "清洁玻璃板", detail: "确认无漏液、无残胶", durationMinutes: nil, isCarryOver: false, reagents: []),
+                LabStep(
+                    id: "gel-pour",
+                    title: "灌制分离胶",
+                    detail: "APS/TEMED 最后加入后立即灌胶",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    variableRefs: ["gel_percent", "V_gel"],
+                    reagents: [
+                        StepReagent(name: "30% Acr/Bis", amountExpression: "V_gel * gel_percent / 30", unit: "ml"),
+                        StepReagent(name: "1.5M Tris pH 8.8", amountExpression: "V_gel * 0.25", unit: "ml"),
+                        StepReagent(name: "10% SDS", amountExpression: "V_gel * 0.01", unit: "ml"),
+                        StepReagent(name: "ddH2O", amountExpression: "V_gel * 0.4", unit: "ml"),
+                        StepReagent(name: "APS/TEMED", amountExpression: "V_gel * 0.01", unit: "ml")
+                    ]
+                ),
+                LabStep(id: "gel-polymerize", title: "聚合等待", detail: "异丙醇压平胶面", durationMinutes: 30, isCarryOver: false, variableRefs: ["t_poly"], reagents: [])
             ],
             variables: [
-                ProtocolVariable(symbol: "gel_percent", name: "凝胶浓度", value: 10, unit: "%", formula: "AcrBis / V_gel"),
-                ProtocolVariable(symbol: "V_gel", name: "分离胶体积", value: 10, unit: "ml", formula: "baseVolume"),
-                ProtocolVariable(symbol: "t_poly", name: "聚合时间", value: 30, unit: "min", formula: "step.duration")
+                ProtocolVariable(symbol: "gel_percent", name: "凝胶浓度", baseValue: 10, unit: "%", isScalable: false, minValue: 8, maxValue: 15),
+                ProtocolVariable(symbol: "V_gel", name: "分离胶体积", baseValue: 10, unit: "ml", isScalable: true, minValue: 5, maxValue: 20),
+                ProtocolVariable(symbol: "t_poly", name: "聚合时间", baseValue: 30, unit: "min", isScalable: false, minValue: 20, maxValue: 45)
             ],
             source: ProtocolSource(type: .literature, title: "Standard SDS-PAGE method", confidence: 0.84)
         )
@@ -248,5 +306,11 @@ enum SampleData {
                 ProtocolIngredient(name: "Bromophenol blue", standardAmount: 0.01, unit: "g")
             ]
         )
+    ]
+
+    static let sampleProjects: [Project] = [
+        Project(name: "CRISPR 敲除验证", colorHex: "#4A90D9", description: "HCT116 细胞系 KO 表型验证"),
+        Project(name: "抗体筛选", colorHex: "#9B59B6", description: "Western blot 一抗效价对比"),
+        Project(name: "质粒库构建", colorHex: "#27AE60", description: "慢病毒载体克隆与保种"),
     ]
 }
