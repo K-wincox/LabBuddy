@@ -2629,9 +2629,9 @@ private struct BenchModeView: View {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(run.title)
-                            .font(.largeTitle.bold())
+                            .font(.title3.bold())
                             .lineLimit(1)
-                            .minimumScaleFactor(0.7)
+                            .minimumScaleFactor(0.75)
                             .truncationMode(.tail)
                         Text("\(run.area.rawValue) · \(run.timeLabel)")
                             .font(.caption)
@@ -2644,9 +2644,7 @@ private struct BenchModeView: View {
                     HStack(spacing: 12) {
                         // Layout toggle
                         Button {
-                            withAnimation(.spring(response: 0.35)) {
-                                layoutMode = layoutMode == .full ? .compact : .full
-                            }
+                            layoutMode = layoutMode == .full ? .compact : .full
                             compactCards = layoutMode == .compact
                         } label: {
                             Image(systemName: layoutMode == .full ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
