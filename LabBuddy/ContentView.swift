@@ -2676,6 +2676,9 @@ private struct BenchModeView: View {
                     }
                     .fixedSize(horizontal: true, vertical: false)
                 }
+                .transaction { transaction in
+                    transaction.animation = nil
+                }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
                 .padding(.bottom, 10)
