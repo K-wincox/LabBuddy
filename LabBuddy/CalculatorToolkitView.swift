@@ -13,12 +13,18 @@ struct CalculatorToolkitView: View {
               let templates = try? JSONDecoder().decode([BufferTemplate].self, from: data) else { return [] }
         return templates
     }()
+    @State private var savedFormulas: [SavedFormula] = {
+        guard let data = UserDefaults.standard.data(forKey: "savedCustomFormulas"),
+              let formulas = try? JSONDecoder().decode([SavedFormula].self, from: data) else { return [] }
+        return formulas
+    }()
     @State private var activeCalculator: CalculatorMode?
     @State private var activeTemplate: BufferTemplate?
     @State private var restoreInputs: [String: Double]?
     @State private var showingNewTemplateSheet = false
     @State private var editingTemplate: BufferTemplate?
     @State private var showCustomCalculator = false
+    @State private var prefillFormula: SavedFormula?
 
     var body: some View {
         ZStack {
@@ -78,6 +84,54 @@ struct CalculatorToolkitView: View {
                                 .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
                             }
                             .buttonStyle(.plain)
+                        }
+                    }
+
+                    // Saved custom formulas
+                    if !savedFormulas.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("已保存的公式")
+                                .font(.headline)
+
+                            ForEach(savedFormulas) { saved in
+                                Button {
+                                    prefillFormula = saved
+                                    showCustomCalculator = true
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "function")
+                                            .font(.title3)
+                                            .foregroundStyle(.indigo)
+                                            .frame(width: 36, height: 36)
+                                            .background(Color.indigo.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(saved.label)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(.primary)
+                                            Text(saved.formula)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .padding(14)
+                                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        savedFormulas.removeAll { $0.id == saved.id }
+                                        saveFormulas()
+                                    } label: {
+                                        Label("删除", systemImage: "trash")
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -240,11 +294,17 @@ struct CalculatorToolkitView: View {
         }
         .sheet(isPresented: $showCustomCalculator) {
             CustomCalculatorSheet(
+                prefill: prefillFormula,
                 onSave: { record in
                     history.removeAll { $0.mode == record.mode && $0.label == record.label }
                     history.insert(record, at: 0)
                     if history.count > 50 { history = Array(history.prefix(50)) }
                     saveHistory()
+                },
+                onSaveFormula: { saved in
+                    savedFormulas.removeAll { $0.label == saved.label && $0.formula == saved.formula }
+                    savedFormulas.insert(saved, at: 0)
+                    saveFormulas()
                 }
             )
         }
@@ -258,6 +318,11 @@ struct CalculatorToolkitView: View {
     private func saveCustomTemplates() {
         guard let data = try? JSONEncoder().encode(customTemplates) else { return }
         UserDefaults.standard.set(data, forKey: "customBufferTemplates")
+    }
+
+    private func saveFormulas() {
+        guard let data = try? JSONEncoder().encode(savedFormulas) else { return }
+        UserDefaults.standard.set(data, forKey: "savedCustomFormulas")
     }
 
     private func lastResultFor(_ mode: CalculatorMode) -> CalculationRecord? {
@@ -1044,21 +1109,53 @@ struct BufferTemplateEditorSheet: View {
 
 // MARK: - Custom Calculator Sheet
 
-private struct CustomVariableField: Identifiable {
+struct CustomVariableField: Identifiable {
     let id = UUID()
     var name: String
     var value: String
     var unit: String
 }
 
+struct SavedFormula: Identifiable, Codable {
+    let id: String
+    var label: String
+    var formula: String
+    var variableNames: [String]
+    var variableValues: [String]
+    var variableUnits: [String]
+    var resultUnit: String
+}
+
 struct CustomCalculatorSheet: View {
+    let prefill: SavedFormula?
     let onSave: (CalculationRecord) -> Void
+    let onSaveFormula: ((SavedFormula) -> Void)?
     @Environment(\.dismiss) private var dismiss
-    @State private var formula: String = ""
-    @State private var variables: [CustomVariableField] = [CustomVariableField(name: "", value: "", unit: "")]
-    @State private var resultLabel: String = "自定义公式"
-    @State private var resultUnit: String = ""
+    @State private var formula: String
+    @State private var variables: [CustomVariableField]
+    @State private var resultLabel: String
+    @State private var resultUnit: String
     @State private var copied = false
+
+    init(prefill: SavedFormula? = nil, onSave: @escaping (CalculationRecord) -> Void, onSaveFormula: ((SavedFormula) -> Void)? = nil) {
+        self.prefill = prefill
+        self.onSave = onSave
+        self.onSaveFormula = onSaveFormula
+        if let f = prefill {
+            _formula = State(initialValue: f.formula)
+            _resultLabel = State(initialValue: f.label)
+            _resultUnit = State(initialValue: f.resultUnit)
+            let fields = zip(zip(f.variableNames, f.variableValues), f.variableUnits).map { nameVal, unit in
+                CustomVariableField(name: nameVal.0, value: nameVal.1, unit: unit)
+            }
+            _variables = State(initialValue: fields.isEmpty ? [CustomVariableField(name: "", value: "", unit: "")] : fields)
+        } else {
+            _formula = State(initialValue: "")
+            _variables = State(initialValue: [CustomVariableField(name: "", value: "", unit: "")])
+            _resultLabel = State(initialValue: "自定义公式")
+            _resultUnit = State(initialValue: "")
+        }
+    }
 
     private var variableDict: [String: Double] {
         var dict = [String: Double]()
@@ -1264,6 +1361,28 @@ struct CustomCalculatorSheet: View {
                             .controlSize(.large)
                             .disabled(result == nil)
                         }
+
+                        Button {
+                            guard result != nil else { return }
+                            let label = resultLabel.trimmingCharacters(in: .whitespaces).isEmpty ? "自定义公式" : resultLabel
+                            let saved = SavedFormula(
+                                id: UUID().uuidString,
+                                label: label,
+                                formula: formula,
+                                variableNames: variables.map { $0.name },
+                                variableValues: variables.map { $0.value },
+                                variableUnits: variables.map { $0.unit },
+                                resultUnit: resultUnit
+                            )
+                            onSaveFormula?(saved)
+                            dismiss()
+                        } label: {
+                            Label("保存公式到工具列表", systemImage: "square.and.arrow.down.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .disabled(result == nil || formula.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                     .padding(16)
                     .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
