@@ -2626,6 +2626,8 @@ private struct BenchModeView: View {
 
             VStack(spacing: 0) {
                 Group {
+                    benchModeToggleBar
+
                     if layoutMode == .full {
                         VStack(spacing: 0) {
                             Spacer().frame(height: 94)
@@ -2928,6 +2930,30 @@ private struct BenchModeView: View {
         }
     }
 
+    private var benchModeToggleBar: some View {
+        HStack {
+            Spacer()
+            Button {
+                var transaction = Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    layoutMode = layoutMode == .full ? .compact : .full
+                }
+            } label: {
+                Label(layoutMode == .full ? "切换详细列表" : "切换大屏模式", systemImage: "rectangle.split.1x2")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(chipColor.opacity(0.12), in: Capsule())
+                    .foregroundStyle(chipColor)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 12)
+        .animation(nil, value: layoutMode)
+    }
+
     private var benchModeHeader: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
@@ -2946,22 +2972,6 @@ private struct BenchModeView: View {
                 .layoutPriority(1)
 
                 HStack(spacing: 12) {
-                    Button {
-                        var transaction = Transaction(animation: nil)
-                        transaction.disablesAnimations = true
-                        withTransaction(transaction) {
-                            layoutMode = layoutMode == .full ? .compact : .full
-                            // 不在这里写 @AppStorage，避免触发全局重绘动画
-                        }
-                    } label: {
-                        Image(systemName: "rectangle.split.1x2")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(chipColor)
-                            .frame(width: 44, height: 44)
-                            .background(chipColor.opacity(0.1), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-
                     Button(action: showDataCard) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 20, weight: .semibold))
