@@ -348,6 +348,7 @@ struct ProtocolDetailView: View {
 
     @State private var variableValues: [String: Double] = [:]
     @State private var showShareSheet = false
+    @State private var selectedStepIndex: Int?
 
     @MainActor
     private func makeShareImage() -> Image {
@@ -454,14 +455,82 @@ struct ProtocolDetailView: View {
                                     .font(.headline)
                                     .padding(.horizontal, 2)
 
+                                if let idx = selectedStepIndex, labProtocol.steps.indices.contains(idx) {
+                                    // Focused step card
+                                    let step = labProtocol.steps[idx]
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text("第 \(idx + 1) 步 / 共 \(labProtocol.steps.count) 步")
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(.secondary)
+                                            Spacer()
+                                            Button {
+                                                withAnimation { selectedStepIndex = nil }
+                                            } label: {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                        DetailStepCard(
+                                            index: idx + 1,
+                                            step: step,
+                                            variables: resolvedVariables,
+                                            areaColor: areaColor
+                                        )
+                                        .frame(maxWidth: .infinity)
+
+                                        // Prev / Next navigation
+                                        HStack(spacing: 12) {
+                                            Button {
+                                                if idx > 0 {
+                                                    withAnimation { selectedStepIndex = idx - 1 }
+                                                }
+                                            } label: {
+                                                Label("上一步", systemImage: "chevron.left")
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .frame(maxWidth: .infinity)
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .controlSize(.regular)
+                                            .disabled(idx == 0)
+
+                                            Button {
+                                                if idx < labProtocol.steps.count - 1 {
+                                                    withAnimation { selectedStepIndex = idx + 1 }
+                                                }
+                                            } label: {
+                                                Label("下一步", systemImage: "chevron.right")
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .frame(maxWidth: .infinity)
+                                            }
+                                            .buttonStyle(.borderedProminent)
+                                            .controlSize(.regular)
+                                            .tint(areaColor)
+                                            .disabled(idx == labProtocol.steps.count - 1)
+                                        }
+                                    }
+                                    .padding(16)
+                                    .background(areaColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(areaColor.opacity(0.18), lineWidth: 1))
+                                }
+
+                                // Step cards tappable for switching
                                 ForEach(Array(labProtocol.steps.enumerated()), id: \.element.id) { index, step in
-                                    DetailStepCard(
-                                        index: index + 1,
-                                        step: step,
-                                        variables: resolvedVariables,
-                                        areaColor: areaColor
-                                    )
-                                    .frame(maxWidth: .infinity)
+                                    Button {
+                                        withAnimation { selectedStepIndex = index }
+                                    } label: {
+                                        DetailStepCard(
+                                            index: index + 1,
+                                            step: step,
+                                            variables: resolvedVariables,
+                                            areaColor: areaColor
+                                        )
+                                        .frame(maxWidth: .infinity)
+                                        .overlay(RoundedRectangle(cornerRadius: 8)
+                                            .stroke(selectedStepIndex == index ? areaColor : Color.clear, lineWidth: 2))
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                             .padding(16)

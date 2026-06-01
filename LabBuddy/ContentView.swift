@@ -2166,9 +2166,13 @@ private struct RunDetailSheet: View {
                 .padding(16)
             }
             .background(Color.labBackground)
-            .navigationTitle(editedTitle.isEmpty ? run.title : editedTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(editedTitle.isEmpty ? run.title : editedTitle)
+                        .font(.headline)
+                        .lineLimit(1)
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("保存") {
                         let trimmedTitle = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
