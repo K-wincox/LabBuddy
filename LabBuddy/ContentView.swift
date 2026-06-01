@@ -2936,7 +2936,7 @@ private struct BenchModeView: View {
                         layoutMode = layoutMode == .full ? .compact : .full
                         compactCards = layoutMode == .compact
                     } label: {
-                        Image(systemName: layoutMode == .full ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
+                        Image(systemName: "rectangle.split.1x2")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(chipColor)
                             .frame(width: 44, height: 44)
