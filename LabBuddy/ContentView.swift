@@ -378,8 +378,17 @@ private struct TodayView: View {
                         }
 
                         if todayRuns.isEmpty {
-                            VStack {
+                            VStack(spacing: 16) {
                                 Spacer()
+                                Image(systemName: "calendar.badge.clock")
+                                    .font(.system(size: 64))
+                                    .foregroundStyle(.teal.opacity(0.3))
+                                Text("今天还没有安排实验")
+                                    .font(.title3.weight(.semibold))
+                                Text("点击下方按钮添加今天的实验计划")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
                                 Button {
                                     scheduleRequest = ScheduleRequest(targetDay: .today, timeLabel: "09:00")
                                 } label: {
