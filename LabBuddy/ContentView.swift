@@ -2625,11 +2625,10 @@ private struct BenchModeView: View {
             Color.labBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                benchModeHeader
-
                 Group {
                     if layoutMode == .full {
                         VStack(spacing: 0) {
+                            Spacer().frame(height: 94)
                             Spacer()
 
                         // MARK: - Step Number
@@ -2857,11 +2856,20 @@ private struct BenchModeView: View {
                         }
                         }
                     } else {
-                        compactModeLayout
+                        VStack(spacing: 0) {
+                            Spacer().frame(height: 94)
+                            compactModeLayout
+                        }
                     }
                 }
             }
             .padding(.bottom, 20)
+            .animation(nil, value: layoutMode)
+
+            VStack(spacing: 0) {
+                benchModeHeader
+                Spacer()
+            }
 
             // Timer finished flash overlay
             if showTimerFlash {
