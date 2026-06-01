@@ -2816,38 +2816,63 @@ private struct BenchModeView: View {
 
                 Spacer()
 
-                // MARK: - Step Indicator Dots
-                HStack(spacing: 10) {
-                    ForEach(Array(steps.enumerated()), id: \.element.id) { idx, step in
-                        Button {
-                            withAnimation(.spring(response: 0.35)) {
-                                stepIndex = idx
-                            }
-                        } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(
-                                        idx == stepIndex ? chipColor :
-                                        completedStepIDs.contains(step.id) ? chipColor.opacity(0.35) :
-                                        Color.secondary.opacity(0.2)
-                                    )
-                                    .frame(width: idx == stepIndex ? 36 : 28, height: idx == stepIndex ? 36 : 28)
-                                    .animation(.spring(response: 0.35), value: stepIndex)
-
-                                if completedStepIDs.contains(step.id) {
-                                    Image(systemName: "checkmark")
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(.white)
-                                } else if idx == stepIndex {
-                                    Text("\(idx + 1)")
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(.white)
+                // MARK: - Step Navigator Cards
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(Array(steps.enumerated()), id: \.element.id) { idx, step in
+                            Button {
+                                withAnimation(.spring(response: 0.35)) {
+                                    stepIndex = idx
                                 }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(spacing: 8) {
+                                        Circle()
+                                            .fill(idx == stepIndex ? chipColor : Color.secondary.opacity(0.15))
+                                            .frame(width: 32, height: 32)
+                                            .overlay {
+                                                if completedStepIDs.contains(step.id) {
+                                                    Image(systemName: "checkmark")
+                                                        .font(.caption2.weight(.bold))
+                                                        .foregroundStyle(.white)
+                                                } else {
+                                                    Text("\(idx + 1)")
+                                                        .font(.caption.weight(.bold))
+                                                        .foregroundStyle(idx == stepIndex ? .white : .secondary)
+                                                }
+                                            }
+
+                                        Text(step.title)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(idx == stepIndex ? .primary : .secondary)
+                                            .lineLimit(2)
+                                            .multilineTextAlignment(.leading)
+                                    }
+
+                                    Text(step.detail)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
+
+                                    if let dur = step.durationMinutes {
+                                        Label("\(dur)m", systemImage: "timer")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(idx == stepIndex ? chipColor : .blue.opacity(0.7))
+                                    }
+                                }
+                                .padding(14)
+                                .frame(width: 240, alignment: .leading)
+                                .background(idx == stepIndex ? chipColor.opacity(0.08) : Color.labPanel, in: RoundedRectangle(cornerRadius: 14))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .stroke(idx == stepIndex ? chipColor : Color.secondary.opacity(0.08), lineWidth: idx == stepIndex ? 2 : 1)
+                                )
                             }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(idx > doneCount) // can't skip ahead
                     }
+                    .padding(.horizontal, 20)
                 }
                 .padding(.bottom, 24)
 
