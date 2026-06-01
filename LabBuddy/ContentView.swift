@@ -2816,63 +2816,38 @@ private struct BenchModeView: View {
 
                 Spacer()
 
-                // MARK: - Step Navigator Cards
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(Array(steps.enumerated()), id: \.element.id) { idx, step in
-                            Button {
-                                withAnimation(.spring(response: 0.35)) {
-                                    stepIndex = idx
-                                }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack(spacing: 8) {
-                                        Circle()
-                                            .fill(idx == stepIndex ? chipColor : Color.secondary.opacity(0.15))
-                                            .frame(width: 32, height: 32)
-                                            .overlay {
-                                                if completedStepIDs.contains(step.id) {
-                                                    Image(systemName: "checkmark")
-                                                        .font(.caption2.weight(.bold))
-                                                        .foregroundStyle(.white)
-                                                } else {
-                                                    Text("\(idx + 1)")
-                                                        .font(.caption.weight(.bold))
-                                                        .foregroundStyle(idx == stepIndex ? .white : .secondary)
-                                                }
-                                            }
-
-                                        Text(step.title)
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundStyle(idx == stepIndex ? .primary : .secondary)
-                                            .lineLimit(2)
-                                            .multilineTextAlignment(.leading)
-                                    }
-
-                                    Text(step.detail)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(2)
-                                        .multilineTextAlignment(.leading)
-
-                                    if let dur = step.durationMinutes {
-                                        Label("\(dur)m", systemImage: "timer")
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(idx == stepIndex ? chipColor : .blue.opacity(0.7))
-                                    }
-                                }
-                                .padding(14)
-                                .frame(width: 240, alignment: .leading)
-                                .background(idx == stepIndex ? chipColor.opacity(0.08) : Color.labPanel, in: RoundedRectangle(cornerRadius: 14))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(idx == stepIndex ? chipColor : Color.secondary.opacity(0.08), lineWidth: idx == stepIndex ? 2 : 1)
-                                )
+                // MARK: - Step Indicator Dots
+                HStack(spacing: 10) {
+                    ForEach(Array(steps.enumerated()), id: \.element.id) { idx, step in
+                        Button {
+                            withAnimation(.spring(response: 0.35)) {
+                                stepIndex = idx
                             }
-                            .buttonStyle(.plain)
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        idx == stepIndex ? chipColor :
+                                        completedStepIDs.contains(step.id) ? chipColor.opacity(0.35) :
+                                        Color.secondary.opacity(0.2)
+                                    )
+                                    .frame(width: idx == stepIndex ? 36 : 28, height: idx == stepIndex ? 36 : 28)
+                                    .animation(.spring(response: 0.35), value: stepIndex)
+
+                                if completedStepIDs.contains(step.id) {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(.white)
+                                } else if idx == stepIndex {
+                                    Text("\(idx + 1)")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(.white)
+                                }
+                            }
                         }
+                        .buttonStyle(.plain)
+                        .disabled(idx > doneCount) // can't skip ahead
                     }
-                    .padding(.horizontal, 20)
                 }
                 .padding(.bottom, 24)
 
@@ -3192,9 +3167,7 @@ private struct BenchModeView: View {
         let hasActiveTimer = activeTimer?.stepTitle == step.title && !(activeTimer?.isFinished ?? true)
 
         return Button {
-            if idx <= doneCount {
-                withAnimation(.spring(response: 0.35)) { stepIndex = idx }
-            }
+            withAnimation(.spring(response: 0.35)) { stepIndex = idx }
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .top, spacing: 10) {
@@ -3202,11 +3175,11 @@ private struct BenchModeView: View {
                     ZStack {
                         Circle()
                             .fill(
-                                isDone ? chipColor.opacity(0.3) :
                                 isCurrent ? chipColor :
-                                Color.secondary.opacity(0.15)
+                                isDone ? chipColor.opacity(0.25) :
+                                Color.secondary.opacity(0.12)
                             )
-                            .frame(width: 30, height: 30)
+                            .frame(width: isCurrent ? 34 : 30, height: isCurrent ? 34 : 30)
                         if isDone {
                             Image(systemName: "checkmark")
                                 .font(.caption2.weight(.bold))
@@ -3220,13 +3193,14 @@ private struct BenchModeView: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(step.title)
-                            .font(.body.weight(.medium))
+                            .font(isCurrent ? .title3.weight(.bold) : .body.weight(.medium))
                             .strikethrough(isDone)
-                            .foregroundStyle(isDone ? .secondary : .primary)
+                            .foregroundStyle(isCurrent ? .primary : (isDone ? .secondary : .secondary))
                         Text(step.detail)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+                            .font(isCurrent ? .body : .subheadline)
+                            .foregroundStyle(isCurrent ? Color.secondary : Color.secondary.opacity(0.75))
+                            .lineLimit(isCurrent ? nil : 2)
+                            .fixedSize(horizontal: false, vertical: isCurrent)
                     }
                     Spacer()
                     if let dur = step.durationMinutes {
@@ -3242,16 +3216,16 @@ private struct BenchModeView: View {
                         } else {
                             Label("\(dur)m", systemImage: "timer")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(isCurrent ? .blue : .blue.opacity(0.6))
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
-                                .background(Color.blue.opacity(0.1), in: Capsule())
+                                .background(Color.blue.opacity(isCurrent ? 0.1 : 0.06), in: Capsule())
                         }
                     }
                 }
 
                 // Reagents
-                if !step.reagents.isEmpty {
+                if isCurrent && !step.reagents.isEmpty {
                     HStack(spacing: 6) {
                         ForEach(step.reagents) { reagent in
                             reagentCompactPill(reagent)
@@ -3263,21 +3237,21 @@ private struct BenchModeView: View {
             .padding(12)
             .background(
                 isCurrent
-                    ? chipColor.opacity(0.05)
+                    ? chipColor.opacity(0.06)
                     : Color.clear
             )
             .overlay(alignment: .leading) {
                 if isCurrent {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(chipColor)
-                        .frame(width: 3)
+                        .frame(width: 4)
                         .padding(.vertical, 8)
                         .padding(.leading, 2)
                 }
             }
+            .opacity(isCurrent ? 1 : 0.55)
         }
         .buttonStyle(.plain)
-        .disabled(idx > doneCount)
     }
 
     // MARK: - Compact Reagent Pill
