@@ -36,7 +36,7 @@ enum WorkflowArea: RawRepresentable, Identifiable, Hashable, Codable {
 
     var id: String { rawValue }
 
-    static let builtIn: [WorkflowArea] = [.cell, .cloning, .blot, .animal, .nucleic, .protein]
+    static let builtIn: [WorkflowArea] = [.cell, .animal, .nucleic, .protein]
 }
 
 struct Project: Identifiable, Hashable, Codable {
