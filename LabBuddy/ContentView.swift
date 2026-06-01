@@ -2626,46 +2626,57 @@ private struct BenchModeView: View {
 
             VStack(spacing: 0) {
                 // MARK: - Top Bar
-                HStack {
+                HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(run.title)
-                            .font(.title3.bold())
+                            .font(.largeTitle.bold())
                             .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .truncationMode(.tail)
                         Text("\(run.area.rawValue) · \(run.timeLabel)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    Spacer()
-                    // Layout toggle
-                    Button {
-                        withAnimation(.spring(response: 0.35)) {
-                            layoutMode = layoutMode == .full ? .compact : .full
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
+
+                    HStack(spacing: 12) {
+                        // Layout toggle
+                        Button {
+                            withAnimation(.spring(response: 0.35)) {
+                                layoutMode = layoutMode == .full ? .compact : .full
+                            }
+                            compactCards = layoutMode == .compact
+                        } label: {
+                            Image(systemName: layoutMode == .full ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(chipColor)
+                                .frame(width: 44, height: 44)
+                                .background(chipColor.opacity(0.1), in: Circle())
                         }
-                        compactCards = layoutMode == .compact
-                    } label: {
-                        Image(systemName: layoutMode == .full ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(chipColor)
-                            .frame(width: 40, height: 40)
-                            .background(chipColor.opacity(0.1), in: Circle())
+                        .buttonStyle(.plain)
+
+                        // Share button
+                        Button(action: showDataCard) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(chipColor)
+                                .frame(width: 44, height: 44)
+                                .background(chipColor.opacity(0.1), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+
+                        // Close button
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    // Share button
-                    Button(action: showDataCard) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(chipColor)
-                            .frame(width: 44, height: 44)
-                            .background(chipColor.opacity(0.1), in: Circle())
-                    }
-                    .buttonStyle(.plain)
-                    // Close button
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
