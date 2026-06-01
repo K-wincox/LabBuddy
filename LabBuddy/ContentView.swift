@@ -2625,315 +2625,240 @@ private struct BenchModeView: View {
             Color.labBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // MARK: - Top Bar
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(run.title)
-                            .font(.title3.bold())
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                            .truncationMode(.tail)
-                        Text("\(run.area.rawValue) · \(run.timeLabel)")
-                            .font(.caption)
+                benchModeHeader
+
+                Group {
+                    if layoutMode == .full {
+                        VStack(spacing: 0) {
+                            Spacer()
+
+                        // MARK: - Step Number
+                        Text("步骤 \(stepIndex + 1)")
+                            .font(.system(size: 48, weight: .bold, design: .rounded))
+                            .foregroundStyle(chipColor)
+                            .padding(.bottom, 4)
+
+                        // MARK: - Step Title (hero)
+                        Text(currentStep.title)
+                            .font(.system(size: 42, weight: .bold))
+                            .multilineTextAlignment(.center)
+                            .minimumScaleFactor(0.6)
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 12)
+
+                        // MARK: - Step Detail
+                        Text(currentStep.detail)
+                            .font(.title3)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .layoutPriority(1)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 32)
+                            .padding(.bottom, 16)
 
-                    HStack(spacing: 12) {
-                        // Layout toggle
-                        Button {
-                            layoutMode = layoutMode == .full ? .compact : .full
-                            compactCards = layoutMode == .compact
-                        } label: {
-                            Image(systemName: layoutMode == .full ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(chipColor)
-                                .frame(width: 44, height: 44)
-                                .background(chipColor.opacity(0.1), in: Circle())
-                        }
-                        .buttonStyle(.plain)
-
-                        // Share button
-                        Button(action: showDataCard) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundStyle(chipColor)
-                                .frame(width: 44, height: 44)
-                                .background(chipColor.opacity(0.1), in: Circle())
-                        }
-                        .buttonStyle(.plain)
-
-                        // Close button
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 28))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .fixedSize(horizontal: true, vertical: false)
-                }
-                .transaction { transaction in
-                    transaction.animation = nil
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 10)
-
-                // MARK: - Progress Bar
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.secondary.opacity(0.15))
-                            .frame(height: 4)
-                        Capsule()
-                            .fill(chipColor)
-                            .frame(width: max(4, geo.size.width * CGFloat(doneCount) / CGFloat(max(1, steps.count))), height: 4)
-                            .animation(.spring(response: 0.4), value: doneCount)
-                    }
-                }
-                .frame(height: 4)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
-
-                if layoutMode == .full {
-
-                    Spacer()
-
-                // MARK: - Step Number
-                Text("步骤 \(stepIndex + 1)")
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .foregroundStyle(chipColor)
-                    .padding(.bottom, 4)
-
-                // MARK: - Step Title (hero)
-                Text(currentStep.title)
-                    .font(.system(size: 42, weight: .bold))
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.6)
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 12)
-
-                // MARK: - Step Detail
-                Text(currentStep.detail)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 32)
-                    .padding(.bottom, 16)
-
-                // MARK: - Reagents Panel (full mode)
-                if !currentStep.reagents.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("本步试剂")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        ForEach(currentStep.reagents) { reagent in
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(chipColor.opacity(0.35))
-                                    .frame(width: 5, height: 5)
-                                Text(reagent.name)
-                                    .font(.caption)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                reagentAmountView(reagent)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(chipColor.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(chipColor.opacity(0.08), lineWidth: 1))
-                    .padding(.horizontal, 32)
-                    .padding(.bottom, 12)
-                }
-
-                // MARK: - Timer Display
-                if let dur = currentStep.durationMinutes {
-                    if let timer = activeTimer, timer.stepTitle == currentStep.title {
-                        VStack(spacing: 16) {
-                            if timer.isPaused {
-                                // Paused countdown display
-                                VStack(spacing: 4) {
-                                    Text(formatDuration(timer.remainingSeconds))
-                                        .font(.system(size: 48, weight: .bold, design: .monospaced))
-                                        .foregroundStyle(.orange)
-                                    Text("已暂停")
-                                        .font(.caption)
-                                        .foregroundStyle(.orange.opacity(0.6))
-                                }
-                            } else {
-                                CircularTimerView(
-                                    totalSeconds: dur * 60,
-                                    endsAt: timer.endsAt
-                                )
-                            }
-
-                            HStack(spacing: 16) {
-                                if timer.isPaused {
-                                    Button { resumeTimer() } label: {
-                                        Label("继续", systemImage: "play.fill")
+                        // MARK: - Reagents Panel (full mode)
+                        if !currentStep.reagents.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("本步试剂")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                ForEach(currentStep.reagents) { reagent in
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(chipColor.opacity(0.35))
+                                            .frame(width: 5, height: 5)
+                                        Text(reagent.name)
+                                            .font(.caption)
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                        reagentAmountView(reagent)
                                     }
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(chipColor)
-                                } else {
-                                    Button { pauseTimer() } label: {
-                                        Label("暂停", systemImage: "pause.fill")
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(chipColor.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(chipColor.opacity(0.08), lineWidth: 1))
+                            .padding(.horizontal, 32)
+                            .padding(.bottom, 12)
+                        }
+
+                        // MARK: - Timer Display
+                        if let dur = currentStep.durationMinutes {
+                            if let timer = activeTimer, timer.stepTitle == currentStep.title {
+                                VStack(spacing: 16) {
+                                    if timer.isPaused {
+                                        VStack(spacing: 4) {
+                                            Text(formatDuration(timer.remainingSeconds))
+                                                .font(.system(size: 48, weight: .bold, design: .monospaced))
+                                                .foregroundStyle(.orange)
+                                            Text("已暂停")
+                                                .font(.caption)
+                                                .foregroundStyle(.orange.opacity(0.6))
+                                        }
+                                    } else {
+                                        CircularTimerView(
+                                            totalSeconds: dur * 60,
+                                            endsAt: timer.endsAt
+                                        )
                                     }
-                                    .buttonStyle(.bordered)
-                                    .tint(chipColor)
+
+                                    HStack(spacing: 16) {
+                                        if timer.isPaused {
+                                            Button { resumeTimer() } label: {
+                                                Label("继续", systemImage: "play.fill")
+                                            }
+                                            .buttonStyle(.borderedProminent)
+                                            .tint(chipColor)
+                                        } else {
+                                            Button { pauseTimer() } label: {
+                                                Label("暂停", systemImage: "pause.fill")
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .tint(chipColor)
+                                        }
+
+                                        Button { stopTimer() } label: {
+                                            Label("取消", systemImage: "stop.fill")
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .tint(.red)
+                                    }
                                 }
-
-                                Button { stopTimer() } label: {
-                                    Label("取消", systemImage: "stop.fill")
+                                .padding(.bottom, 12)
+                            } else if !isCurrentStepDone {
+                                Button {
+                                    if let dur = currentStep.durationMinutes {
+                                        let totalSecs = dur * 60
+                                        customHours = totalSecs / 3600
+                                        customMins = (totalSecs % 3600) / 60
+                                        customSecs = totalSecs % 60
+                                    } else {
+                                        customHours = 0
+                                        customMins = 5
+                                        customSecs = 0
+                                    }
+                                    showCustomTimer = true
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "play.fill")
+                                        Text("启动计时 \(dur) min")
+                                    }
+                                    .font(.title3.weight(.semibold))
+                                    .padding(.horizontal, 28)
+                                    .padding(.vertical, 14)
+                                    .background(chipColor, in: Capsule())
+                                    .foregroundStyle(.white)
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(.red)
-                            }
-                        }
-                        .padding(.bottom, 12)
-                    } else if !isCurrentStepDone {
-                        Button {
-                            if let dur = currentStep.durationMinutes {
-                                let totalSecs = dur * 60
-                                customHours = totalSecs / 3600
-                                customMins = (totalSecs % 3600) / 60
-                                customSecs = totalSecs % 60
-                            } else {
-                                customHours = 0
-                                customMins = 5
-                                customSecs = 0
-                            }
-                            showCustomTimer = true
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "play.fill")
-                                Text("启动计时 \(dur) min")
-                            }
-                            .font(.title3.weight(.semibold))
-                            .padding(.horizontal, 28)
-                            .padding(.vertical, 14)
-                            .background(chipColor, in: Capsule())
-                            .foregroundStyle(.white)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.bottom, 12)
-                    }
-                }
-
-                Spacer()
-
-                // MARK: - Step Indicator Dots
-                HStack(spacing: 10) {
-                    ForEach(Array(steps.enumerated()), id: \.element.id) { idx, step in
-                        Button {
-                            withAnimation(.spring(response: 0.35)) {
-                                stepIndex = idx
-                            }
-                        } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(
-                                        idx == stepIndex ? chipColor :
-                                        completedStepIDs.contains(step.id) ? chipColor.opacity(0.35) :
-                                        Color.secondary.opacity(0.2)
-                                    )
-                                    .frame(width: idx == stepIndex ? 36 : 28, height: idx == stepIndex ? 36 : 28)
-                                    .animation(.spring(response: 0.35), value: stepIndex)
-
-                                if completedStepIDs.contains(step.id) {
-                                    Image(systemName: "checkmark")
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(.white)
-                                } else if idx == stepIndex {
-                                    Text("\(idx + 1)")
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(idx > doneCount) // can't skip ahead
-                    }
-                }
-                .padding(.bottom, 24)
-
-                // MARK: - Gesture hints
-                HStack(spacing: 24) {
-                    Image(systemName: "chevron.left")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(stepIndex > 0 ? chipColor : .secondary.opacity(0.2))
-                        .onTapGesture {
-                            if stepIndex > 0 {
-                                withAnimation(.spring(response: 0.35)) { stepIndex -= 1 }
+                                .buttonStyle(.plain)
+                                .padding(.bottom, 12)
                             }
                         }
 
-                    Button {
-                        if isRunComplete {
-                            showingCompleteAlert = true
-                        } else {
-                            if !isCurrentStepDone {
-                                toggleStep(currentStep.id)
-                            }
-                            // auto-advance to next incomplete step
-                            let nextIdx = steps.firstIndex { !completedStepIDs.contains($0.id) }
-                            if let next = nextIdx {
-                                withAnimation(.spring(response: 0.35)) {
-                                    stepIndex = next
+                        Spacer()
+
+                        // MARK: - Step Indicator Dots
+                        HStack(spacing: 10) {
+                            ForEach(Array(steps.enumerated()), id: \.element.id) { idx, step in
+                                Button {
+                                    withAnimation(.spring(response: 0.35)) {
+                                        stepIndex = idx
+                                    }
+                                } label: {
+                                    ZStack {
+                                        Circle()
+                                            .fill(
+                                                idx == stepIndex ? chipColor :
+                                                completedStepIDs.contains(step.id) ? chipColor.opacity(0.35) :
+                                                Color.secondary.opacity(0.2)
+                                            )
+                                            .frame(width: idx == stepIndex ? 36 : 28, height: idx == stepIndex ? 36 : 28)
+                                            .animation(.spring(response: 0.35), value: stepIndex)
+
+                                        if completedStepIDs.contains(step.id) {
+                                            Image(systemName: "checkmark")
+                                                .font(.caption2.weight(.bold))
+                                                .foregroundStyle(.white)
+                                        } else if idx == stepIndex {
+                                            Text("\(idx + 1)")
+                                                .font(.caption2.weight(.bold))
+                                                .foregroundStyle(.white)
+                                        }
+                                    }
                                 }
-                            } else {
-                                // all done - check if run is complete now
-                                if doneCount + 1 >= steps.count {
+                                .buttonStyle(.plain)
+                                .disabled(idx > doneCount)
+                            }
+                        }
+                        .padding(.bottom, 24)
+
+                        // MARK: - Gesture hints
+                        HStack(spacing: 24) {
+                            Image(systemName: "chevron.left")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(stepIndex > 0 ? chipColor : .secondary.opacity(0.2))
+                                .onTapGesture {
+                                    if stepIndex > 0 {
+                                        withAnimation(.spring(response: 0.35)) { stepIndex -= 1 }
+                                    }
+                                }
+
+                            Button {
+                                if isRunComplete {
                                     showingCompleteAlert = true
+                                } else {
+                                    if !isCurrentStepDone {
+                                        toggleStep(currentStep.id)
+                                    }
+                                    let nextIdx = steps.firstIndex { !completedStepIDs.contains($0.id) }
+                                    if let next = nextIdx {
+                                        withAnimation(.spring(response: 0.35)) {
+                                            stepIndex = next
+                                        }
+                                    } else if doneCount + 1 >= steps.count {
+                                        showingCompleteAlert = true
+                                    }
                                 }
+                            } label: {
+                                Label(
+                                    isRunComplete ? "完成实验" : "完成此步骤",
+                                    systemImage: isRunComplete ? "checkmark.seal.fill" : "checkmark.circle.fill"
+                                )
+                                .font(.title3.weight(.bold))
+                                .frame(maxWidth: .infinity, minHeight: 58)
                             }
-                        }
-                    } label: {
-                        Label(
-                            isRunComplete ? "完成实验" : "完成此步骤",
-                            systemImage: isRunComplete ? "checkmark.seal.fill" : "checkmark.circle.fill"
-                        )
-                        .font(.title3.weight(.bold))
-                        .frame(maxWidth: .infinity, minHeight: 58)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .tint(isRunComplete ? .teal : chipColor)
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .tint(isRunComplete ? .teal : chipColor)
 
-                    Image(systemName: "chevron.right")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(stepIndex < steps.count - 1 ? chipColor : .secondary.opacity(0.2))
-                        .onTapGesture {
-                            if stepIndex < steps.count - 1 {
-                                withAnimation(.spring(response: 0.35)) { stepIndex += 1 }
+                            Image(systemName: "chevron.right")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(stepIndex < steps.count - 1 ? chipColor : .secondary.opacity(0.2))
+                                .onTapGesture {
+                                    if stepIndex < steps.count - 1 {
+                                        withAnimation(.spring(response: 0.35)) { stepIndex += 1 }
+                                    }
+                                }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+
+                        if !isRunComplete && doneCount > 0 && stepIndex > doneCount {
+                            Button {
+                                withAnimation(.spring(response: 0.35)) {
+                                    stepIndex = doneCount
+                                }
+                            } label: {
+                                Label("回到当前步骤", systemImage: "arrow.uturn.backward")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
+                            .buttonStyle(.plain)
+                            .padding(.bottom, 6)
                         }
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-
-                // Sub-action: jump to incomplete
-                if !isRunComplete && doneCount > 0 && stepIndex > doneCount {
-                    Button {
-                        withAnimation(.spring(response: 0.35)) {
-                            stepIndex = doneCount
                         }
-                    } label: {
-                        Label("回到当前步骤", systemImage: "arrow.uturn.backward")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    } else {
+                        compactModeLayout
                     }
-                    .buttonStyle(.plain)
-                    .padding(.bottom, 6)
-                }
-                } else {
-                    compactModeLayout
                 }
             }
             .padding(.bottom, 20)
@@ -2986,6 +2911,79 @@ private struct BenchModeView: View {
             Button("稍后处理", role: .cancel) { dismiss() }
         } message: {
             Text("所有步骤已完成，是否生成结果卡片？")
+        }
+    }
+
+    private var benchModeHeader: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(run.title)
+                        .font(.title3.bold())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .truncationMode(.tail)
+                    Text("\(run.area.rawValue) · \(run.timeLabel)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+
+                HStack(spacing: 12) {
+                    Button {
+                        layoutMode = layoutMode == .full ? .compact : .full
+                        compactCards = layoutMode == .compact
+                    } label: {
+                        Image(systemName: layoutMode == .full ? "rectangle.compress.vertical" : "rectangle.expand.vertical")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(chipColor)
+                            .frame(width: 44, height: 44)
+                            .background(chipColor.opacity(0.1), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: showDataCard) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(chipColor)
+                            .frame(width: 44, height: 44)
+                            .background(chipColor.opacity(0.1), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .transaction { transaction in
+                transaction.animation = nil
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 10)
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.15))
+                        .frame(height: 4)
+                    Capsule()
+                        .fill(chipColor)
+                        .frame(width: max(4, geo.size.width * CGFloat(doneCount) / CGFloat(max(1, steps.count))), height: 4)
+                        .animation(.spring(response: 0.4), value: doneCount)
+                }
+            }
+            .frame(height: 4)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
         }
     }
 
