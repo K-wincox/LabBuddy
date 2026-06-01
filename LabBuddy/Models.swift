@@ -5,6 +5,9 @@ enum WorkflowArea: RawRepresentable, Identifiable, Hashable, Codable {
     case cell
     case cloning
     case blot
+    case animal
+    case nucleic
+    case protein
     case custom(String)
 
     var rawValue: String {
@@ -12,6 +15,9 @@ enum WorkflowArea: RawRepresentable, Identifiable, Hashable, Codable {
         case .cell: return "细胞实验"
         case .cloning: return "分子克隆"
         case .blot: return "WB/跑胶"
+        case .animal: return "动物实验"
+        case .nucleic: return "核酸实验"
+        case .protein: return "蛋白实验"
         case .custom(let s): return s
         }
     }
@@ -21,13 +27,16 @@ enum WorkflowArea: RawRepresentable, Identifiable, Hashable, Codable {
         case "细胞实验": self = .cell
         case "分子克隆": self = .cloning
         case "WB/跑胶": self = .blot
+        case "动物实验": self = .animal
+        case "核酸实验": self = .nucleic
+        case "蛋白实验": self = .protein
         default: self = .custom(rawValue)
         }
     }
 
     var id: String { rawValue }
 
-    static let builtIn: [WorkflowArea] = [.cell, .cloning, .blot]
+    static let builtIn: [WorkflowArea] = [.cell, .cloning, .blot, .animal, .nucleic, .protein]
 }
 
 struct Project: Identifiable, Hashable, Codable {

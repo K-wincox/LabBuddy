@@ -107,135 +107,137 @@ enum SampleData {
 
     static let protocols: [LabProtocol] = [
         LabProtocol(
-            id: "complete-medium",
-            name: "DMEM 完全培养基",
+            id: "cell-passage-protocol",
+            name: "细胞传代",
             area: .cell,
-            baseVolume: 200,
-            volumeUnit: "ml",
-            expectedDuration: "8 min",
+            baseVolume: 10,
+            volumeUnit: "ml（培养皿）",
+            expectedDuration: "15 min",
             ingredients: [
-                ProtocolIngredient(name: "DMEM high glucose", standardAmount: 180, unit: "ml"),
-                ProtocolIngredient(name: "FBS", standardAmount: 20, unit: "ml"),
-                ProtocolIngredient(name: "Pen/Strep", standardAmount: 2, unit: "ml")
+                ProtocolIngredient(name: "DMEM 基础培养基", standardAmount: 180, unit: "ml"),
+                ProtocolIngredient(name: "FBS (10%)", standardAmount: 20, unit: "ml"),
+                ProtocolIngredient(name: "双抗 (1%)", standardAmount: 0.2, unit: "ml"),
+                ProtocolIngredient(name: "10× PBS", standardAmount: 25, unit: "ml"),
+                ProtocolIngredient(name: "ddH₂O", standardAmount: 225, unit: "ml"),
+                ProtocolIngredient(name: "0.5M EDTA", standardAmount: 0.4, unit: "ml"),
+                ProtocolIngredient(name: "胰酶", standardAmount: 2, unit: "ml"),
+                ProtocolIngredient(name: "Versene 洗涤液", standardAmount: 2, unit: "ml")
             ],
             steps: [
                 LabStep(
-                    id: "medium-warm",
-                    title: "预温基础培养基",
-                    detail: "37°C 水浴，使用前确认无沉淀",
-                    durationMinutes: 8,
-                    isCarryOver: false,
-                    variableRefs: ["t_warm"],
-                    reagents: [
-                        StepReagent(name: "DMEM high glucose", amountExpression: "V_total * 0.9", unit: "ml")
-                    ]
-                ),
-                LabStep(
-                    id: "medium-mix",
-                    title: "加入血清与双抗",
-                    detail: "按比例加入后轻柔颠倒混匀",
+                    id: "passage-prep-medium",
+                    title: "配制完全培养基",
+                    detail: "180 mL DMEM 基础培养基 + 20 mL 10% FBS + 200 μL 1% 双抗，混匀备用（不同细胞系配方可能不同）",
                     durationMinutes: nil,
                     isCarryOver: false,
-                    variableRefs: ["V_total", "f_serum"],
                     reagents: [
-                        StepReagent(name: "FBS", amountExpression: "总体积 * 血清比例", unit: "ml"),
-                        StepReagent(name: "Pen/Strep", amountExpression: "V_total * 0.01", unit: "ml")
+                        StepReagent(name: "DMEM 基础培养基", amountExpression: "180", unit: "ml"),
+                        StepReagent(name: "FBS (10%)", amountExpression: "20", unit: "ml"),
+                        StepReagent(name: "双抗 (1%)", amountExpression: "0.2", unit: "ml")
                     ]
                 ),
                 LabStep(
-                    id: "medium-label",
-                    title: "标记批次",
-                    detail: "写明日期、配方与操作者",
+                    id: "passage-prep-versene",
+                    title: "配制 Versene 洗涤液",
+                    detail: "25 mL 10× PBS + 225 mL 水 + 400 μL 0.5M EDTA，混匀备用",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    reagents: [
+                        StepReagent(name: "10× PBS", amountExpression: "25", unit: "ml"),
+                        StepReagent(name: "ddH₂O", amountExpression: "225", unit: "ml"),
+                        StepReagent(name: "0.5M EDTA", amountExpression: "0.4", unit: "ml")
+                    ]
+                ),
+                LabStep(
+                    id: "passage-prep-digest",
+                    title: "配制消化液",
+                    detail: "40 mL Versene 洗涤液 + 胰酶，混匀备用",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    reagents: [
+                        StepReagent(name: "Versene 洗涤液", amountExpression: "40", unit: "ml"),
+                        StepReagent(name: "胰酶", amountExpression: "2", unit: "ml")
+                    ]
+                ),
+                LabStep(
+                    id: "passage-observe",
+                    title: "镜下观察细胞状态",
+                    detail: "取培养细胞，在显微镜下观察细胞密度和生长状态，密度达 90% 左右可传代",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    reagents: []
+                ),
+                LabStep(
+                    id: "passage-versene",
+                    title: "Versene 洗涤",
+                    detail: "倒去旧培养液，沿瓶壁加入 2 mL Versene，前后晃动充分接触细胞后倒入废液缸，用枪吸净残余",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    reagents: [
+                        StepReagent(name: "Versene 洗涤液", amountExpression: "2", unit: "ml")
+                    ]
+                ),
+                LabStep(
+                    id: "passage-trypsin",
+                    title: "胰酶消化",
+                    detail: "加入 2 mL 消化液覆盖瓶底，放入培养箱消化（293T ≈ 1 min，A549 ≈ 4 min）。镜下观察：细胞变圆、出现间隙、呈沙状悬浮即可",
+                    durationMinutes: 3,
+                    isCarryOver: false,
+                    reagents: [
+                        StepReagent(name: "胰酶", amountExpression: "2", unit: "ml")
+                    ]
+                ),
+                LabStep(
+                    id: "passage-stop",
+                    title: "终止消化 & 收集细胞",
+                    detail: "加入等量完全培养基终止消化，反复吹打瓶底使细胞充分悬浮，吸入离心管",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    reagents: [
+                        StepReagent(name: "DMEM 基础培养基", amountExpression: "2", unit: "ml")
+                    ]
+                ),
+                LabStep(
+                    id: "passage-centrifuge",
+                    title: "离心",
+                    detail: "300 rpm，离心 4 分钟",
+                    durationMinutes: 4,
+                    isCarryOver: false,
+                    reagents: []
+                ),
+                LabStep(
+                    id: "passage-resuspend",
+                    title: "弃上清 & 重悬",
+                    detail: "倒掉上清，轻弹细胞沉淀使其散开。如需计数：加 1 mL 培养基混匀，取 20 μL 至计数板，细胞浓度（个/mL）= 对角线 3 大方格细胞数 ÷ 3 × 10⁴ × 稀释倍数",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    reagents: []
+                ),
+                LabStep(
+                    id: "passage-split",
+                    title: "传代接种",
+                    detail: "加完全培养基重悬约 20 次，弃去多余，每板留 1 mL 细胞悬液，再补完全培养基至目标体积（T25 ≈ 5 mL（3-5 mL），T75 ≈ 15 mL（13-15 mL）），充分重悬后加入培养皿，用 8 字法混匀",
+                    durationMinutes: nil,
+                    isCarryOver: false,
+                    variableRefs: ["split_ratio", "A_dish"],
+                    reagents: [
+                        StepReagent(name: "完全培养基", amountExpression: "split_ratio * A_dish / 5", unit: "ml")
+                    ]
+                ),
+                LabStep(
+                    id: "passage-label",
+                    title: "标记 & 放入培养箱",
+                    detail: "镜下确认细胞已摇匀，写上细胞类型、代数、日期，放入培养箱（37°C、5% CO₂、90% 湿度）",
                     durationMinutes: nil,
                     isCarryOver: false,
                     reagents: []
                 )
             ],
             variables: [
-                ProtocolVariable(symbol: "V_total", name: "总体积", baseValue: 200, unit: "ml", isScalable: true, minValue: 50, maxValue: 500),
-                ProtocolVariable(symbol: "f_serum", name: "血清比例", baseValue: 10, unit: "%", isScalable: false, minValue: 5, maxValue: 20),
-                ProtocolVariable(symbol: "t_warm", name: "预温时间", baseValue: 8, unit: "min", isScalable: false, minValue: 5, maxValue: 15)
+                ProtocolVariable(symbol: "split_ratio", name: "传代比例", baseValue: 3, unit: "倍", isScalable: false, minValue: 2, maxValue: 10),
+                ProtocolVariable(symbol: "A_dish", name: "培养皿面积", baseValue: 78.54, unit: "cm²", isScalable: true, minValue: 9.6, maxValue: 150)
             ],
-            source: ProtocolSource(type: .sop, title: "细胞培养室常规 SOP", confidence: 0.92)
-        ),
-        LabProtocol(
-            id: "ligation",
-            name: "T4 连接反应",
-            area: .cloning,
-            baseVolume: 20,
-            volumeUnit: "ul",
-            expectedDuration: "25 min",
-            ingredients: [
-                ProtocolIngredient(name: "Vector", standardAmount: 2, unit: "ul"),
-                ProtocolIngredient(name: "Insert", standardAmount: 6, unit: "ul"),
-                ProtocolIngredient(name: "10x Ligase buffer", standardAmount: 2, unit: "ul"),
-                ProtocolIngredient(name: "T4 Ligase", standardAmount: 1, unit: "ul"),
-                ProtocolIngredient(name: "ddH2O", standardAmount: 9, unit: "ul")
-            ],
-            steps: [
-                LabStep(id: "ligation-thaw", title: "冰上融化组分", detail: "buffer 完全融化后短暂离心", durationMinutes: nil, isCarryOver: false, reagents: []),
-                LabStep(
-                    id: "ligation-mix",
-                    title: "配置连接体系",
-                    detail: "酶最后加入，轻柔混匀",
-                    durationMinutes: nil,
-                    isCarryOver: false,
-                    variableRefs: ["V_reaction"],
-                    reagents: [
-                        StepReagent(name: "Vector", amountExpression: "2", unit: "ul"),
-                        StepReagent(name: "Insert", amountExpression: "6", unit: "ul"),
-                        StepReagent(name: "10x Ligase buffer", amountExpression: "V_reaction * 0.1", unit: "ul"),
-                        StepReagent(name: "T4 Ligase", amountExpression: "1", unit: "ul"),
-                        StepReagent(name: "ddH2O", amountExpression: "V_reaction - 11", unit: "ul")
-                    ]
-                ),
-                LabStep(id: "ligation-incubate", title: "连接孵育", detail: "16°C 或室温按策略孵育", durationMinutes: 25, isCarryOver: false, variableRefs: ["t_ligation"], reagents: [])
-            ],
-            variables: [
-                ProtocolVariable(symbol: "V_reaction", name: "反应总体积", baseValue: 20, unit: "ul", isScalable: true, minValue: 10, maxValue: 50),
-                ProtocolVariable(symbol: "t_ligation", name: "连接时间", baseValue: 25, unit: "min", isScalable: false, minValue: 10, maxValue: 60)
-            ],
-            source: ProtocolSource(type: .kitManual, title: "T4 Ligase kit quick protocol", confidence: 0.88)
-        ),
-        LabProtocol(
-            id: "sds-gel",
-            name: "10% SDS-PAGE 分离胶",
-            area: .blot,
-            baseVolume: 10,
-            volumeUnit: "ml",
-            expectedDuration: "12 min",
-            ingredients: [
-                ProtocolIngredient(name: "30% Acr/Bis", standardAmount: 3.3, unit: "ml"),
-                ProtocolIngredient(name: "1.5M Tris pH 8.8", standardAmount: 2.5, unit: "ml"),
-                ProtocolIngredient(name: "10% SDS", standardAmount: 0.1, unit: "ml"),
-                ProtocolIngredient(name: "ddH2O", standardAmount: 4.0, unit: "ml"),
-                ProtocolIngredient(name: "APS/TEMED", standardAmount: 0.1, unit: "ml")
-            ],
-            steps: [
-                LabStep(id: "gel-clean", title: "清洁玻璃板", detail: "确认无漏液、无残胶", durationMinutes: nil, isCarryOver: false, reagents: []),
-                LabStep(
-                    id: "gel-pour",
-                    title: "灌制分离胶",
-                    detail: "APS/TEMED 最后加入后立即灌胶",
-                    durationMinutes: nil,
-                    isCarryOver: false,
-                    variableRefs: ["gel_percent", "V_gel"],
-                    reagents: [
-                        StepReagent(name: "30% Acr/Bis", amountExpression: "V_gel * gel_percent / 30", unit: "ml"),
-                        StepReagent(name: "1.5M Tris pH 8.8", amountExpression: "V_gel * 0.25", unit: "ml"),
-                        StepReagent(name: "10% SDS", amountExpression: "V_gel * 0.01", unit: "ml"),
-                        StepReagent(name: "ddH2O", amountExpression: "V_gel * 0.4", unit: "ml"),
-                        StepReagent(name: "APS/TEMED", amountExpression: "V_gel * 0.01", unit: "ml")
-                    ]
-                ),
-                LabStep(id: "gel-polymerize", title: "聚合等待", detail: "异丙醇压平胶面", durationMinutes: 30, isCarryOver: false, variableRefs: ["t_poly"], reagents: [])
-            ],
-            variables: [
-                ProtocolVariable(symbol: "gel_percent", name: "凝胶浓度", baseValue: 10, unit: "%", isScalable: false, minValue: 8, maxValue: 15),
-                ProtocolVariable(symbol: "V_gel", name: "分离胶体积", baseValue: 10, unit: "ml", isScalable: true, minValue: 5, maxValue: 20),
-                ProtocolVariable(symbol: "t_poly", name: "聚合时间", baseValue: 30, unit: "min", isScalable: false, minValue: 20, maxValue: 45)
-            ],
-            source: ProtocolSource(type: .literature, title: "Standard SDS-PAGE method", confidence: 0.84)
+            source: ProtocolSource(type: .sop, title: "细胞培养室常规 SOP", confidence: 0.98)
         )
     ]
 
@@ -255,32 +257,6 @@ enum SampleData {
 
     static let bufferTemplates: [BufferTemplate] = [
         BufferTemplate(
-            id: "pbs",
-            name: "1× PBS",
-            area: .cell,
-            baseVolume: 1000,
-            volumeUnit: "ml",
-            ingredients: [
-                ProtocolIngredient(name: "NaCl", standardAmount: 8.0, unit: "g"),
-                ProtocolIngredient(name: "KCl", standardAmount: 0.2, unit: "g"),
-                ProtocolIngredient(name: "Na₂HPO₄", standardAmount: 1.44, unit: "g"),
-                ProtocolIngredient(name: "KH₂PO₄", standardAmount: 0.24, unit: "g"),
-                ProtocolIngredient(name: "ddH₂O", standardAmount: 1000, unit: "ml")
-            ]
-        ),
-        BufferTemplate(
-            id: "tbst",
-            name: "TBST (Western Blot 洗涤缓冲液)",
-            area: .blot,
-            baseVolume: 1000,
-            volumeUnit: "ml",
-            ingredients: [
-                ProtocolIngredient(name: "Tris-HCl (pH 7.6)", standardAmount: 20, unit: "mM"),
-                ProtocolIngredient(name: "NaCl", standardAmount: 150, unit: "mM"),
-                ProtocolIngredient(name: "Tween-20", standardAmount: 0.1, unit: "%")
-            ]
-        ),
-        BufferTemplate(
             id: "dmem-complete",
             name: "DMEM 完全培养基",
             area: .cell,
@@ -291,26 +267,8 @@ enum SampleData {
                 ProtocolIngredient(name: "FBS", standardAmount: 20, unit: "ml"),
                 ProtocolIngredient(name: "Pen/Strep", standardAmount: 2, unit: "ml")
             ]
-        ),
-        BufferTemplate(
-            id: "loading-buffer",
-            name: "5× SDS Loading Buffer",
-            area: .blot,
-            baseVolume: 10,
-            volumeUnit: "ml",
-            ingredients: [
-                ProtocolIngredient(name: "1M Tris-HCl (pH 6.8)", standardAmount: 1.0, unit: "ml"),
-                ProtocolIngredient(name: "SDS", standardAmount: 2.0, unit: "g"),
-                ProtocolIngredient(name: "Glycerol", standardAmount: 5.0, unit: "ml"),
-                ProtocolIngredient(name: "β-Mercaptoethanol", standardAmount: 0.5, unit: "ml"),
-                ProtocolIngredient(name: "Bromophenol blue", standardAmount: 0.01, unit: "g")
-            ]
         )
     ]
 
-    static let sampleProjects: [Project] = [
-        Project(name: "CRISPR 敲除验证", colorHex: "#4A90D9", description: "HCT116 细胞系 KO 表型验证"),
-        Project(name: "抗体筛选", colorHex: "#9B59B6", description: "Western blot 一抗效价对比"),
-        Project(name: "质粒库构建", colorHex: "#27AE60", description: "慢病毒载体克隆与保种"),
-    ]
+    static let sampleProjects: [Project] = []
 }

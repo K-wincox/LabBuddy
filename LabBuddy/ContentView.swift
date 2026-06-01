@@ -64,6 +64,10 @@ struct ContentView: View {
 
     private func checkNewDay() {
         let todayKey = Self.dayKey(for: Date())
+        guard !importedRuns.isEmpty || !tomorrowRuns.isEmpty else {
+            lastOpenDate = todayKey
+            return
+        }
         guard !lastOpenDate.isEmpty, lastOpenDate != todayKey else {
             if lastOpenDate.isEmpty { lastOpenDate = todayKey }
             return
@@ -100,13 +104,25 @@ struct ContentView: View {
 
     private func loadAll() {
         if let data = UserDefaults.standard.data(forKey: "importedLabRuns"),
-           let runs = try? JSONDecoder().decode([LabRun].self, from: data) { importedRuns = runs }
+           let runs = try? JSONDecoder().decode([LabRun].self, from: data) {
+            importedRuns = runs
+        } else {
+            importedRuns = []
+        }
         if let data = UserDefaults.standard.data(forKey: "tomorrowLabRuns"),
            let runs = try? JSONDecoder().decode([LabRun].self, from: data) { tomorrowRuns = runs }
         if let data = UserDefaults.standard.data(forKey: "pastExperimentDays"),
-           let days = try? JSONDecoder().decode([ExperimentDayRecord].self, from: data) { pastDays = days }
+           let days = try? JSONDecoder().decode([ExperimentDayRecord].self, from: data) {
+            pastDays = days
+        } else {
+            pastDays = []
+        }
         if let data = UserDefaults.standard.data(forKey: "inventoryItems"),
-           let items = try? JSONDecoder().decode([InventoryItem].self, from: data) { inventoryItems = items }
+           let items = try? JSONDecoder().decode([InventoryItem].self, from: data) {
+            inventoryItems = items
+        } else {
+            inventoryItems = []
+        }
         if let data = UserDefaults.standard.data(forKey: "userProjects"),
            let projs = try? JSONDecoder().decode([Project].self, from: data), !projs.isEmpty { projects = projs }
         migrateLegacyProjects()
@@ -167,12 +183,12 @@ struct ContentView: View {
         projects = []
         UserDefaults.standard.removeObject(forKey: "completedStepIDs")
         UserDefaults.standard.removeObject(forKey: "activeLabTimers")
-        UserDefaults.standard.removeObject(forKey: "importedLabRuns")
-        UserDefaults.standard.removeObject(forKey: "tomorrowLabRuns")
-        UserDefaults.standard.removeObject(forKey: "pastExperimentDays")
-        UserDefaults.standard.removeObject(forKey: "inventoryItems")
         UserDefaults.standard.removeObject(forKey: "lastLabBuddyOpenDate")
         UserDefaults.standard.removeObject(forKey: "userProjects")
+        saveImportedRuns(importedRuns)
+        saveTomorrowRuns(tomorrowRuns)
+        savePastDays(pastDays)
+        saveInventoryItems(inventoryItems)
     }
 
     // MARK: - Date helpers
@@ -362,18 +378,8 @@ private struct TodayView: View {
                         }
 
                         if todayRuns.isEmpty {
-                            // Empty state for today
-                            VStack(spacing: 16) {
+                            VStack {
                                 Spacer()
-                                Image(systemName: "calendar.badge.clock")
-                                    .font(.system(size: 64))
-                                    .foregroundStyle(.teal.opacity(0.3))
-                                Text("今天还没有安排实验")
-                                    .font(.title3.weight(.semibold))
-                                Text("点击下方按钮添加今天的实验计划")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.center)
                                 Button {
                                     scheduleRequest = ScheduleRequest(targetDay: .today, timeLabel: "09:00")
                                 } label: {
@@ -407,10 +413,9 @@ private struct TodayView: View {
                                         hapticFeedback(.medium)
                                     }
                                 },
-                                onUpdateRun: { run, newTitle, newProject in
-                                    if let index = importedRuns.firstIndex(where: { $0.id == run.id }) {
-                                        importedRuns[index].title = newTitle
-                                        importedRuns[index].projectID = newProject
+                                onUpdateRun: { updatedRun in
+                                    if let index = importedRuns.firstIndex(where: { $0.id == updatedRun.id }) {
+                                        importedRuns[index] = updatedRun
                                     }
                                 },
                                 pauseTimer: pauseTimer,
@@ -419,16 +424,18 @@ private struct TodayView: View {
                             )
                         }
 
-                        Button {
-                            showEndDayConfirm = true
-                        } label: {
-                            Label("结束今天", systemImage: "moon.stars")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .padding(.vertical, 10)
-                                .frame(maxWidth: .infinity)
+                        if !todayRuns.isEmpty {
+                            Button {
+                                showEndDayConfirm = true
+                            } label: {
+                                Label("结束今天", systemImage: "moon.stars")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.vertical, 10)
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
 
                     case .tomorrow:
                         if tomorrowRuns.isEmpty {
@@ -472,10 +479,9 @@ private struct TodayView: View {
                                 showDataCard: { selectedDataCardRun = $0 },
                                 openBenchMode: { _ in },
                                 removeRun: { run in tomorrowRuns.removeAll { $0.id == run.id }; hapticFeedback(.medium) },
-                                onUpdateRun: { run, newTitle, newProject in
-                                    if let index = tomorrowRuns.firstIndex(where: { $0.id == run.id }) {
-                                        tomorrowRuns[index].title = newTitle
-                                        tomorrowRuns[index].projectID = newProject
+                                onUpdateRun: { updatedRun in
+                                    if let index = tomorrowRuns.firstIndex(where: { $0.id == updatedRun.id }) {
+                                        tomorrowRuns[index] = updatedRun
                                     }
                                 },
                                 pauseTimer: { _ in },
@@ -1395,7 +1401,7 @@ private struct DayTimelineView: View {
     let showDataCard: (LabRun) -> Void
     let openBenchMode: (LabRun) -> Void
     let removeRun: (LabRun) -> Void
-    let onUpdateRun: (LabRun, String, String?) -> Void  // (run, newTitle, newProject)
+    let onUpdateRun: (LabRun) -> Void
     let pauseTimer: (ActiveLabTimer) -> Void
     let resumeTimer: (ActiveLabTimer) -> Void
     let stopTimer: (ActiveLabTimer) -> Void
@@ -1564,15 +1570,9 @@ private struct DayTimelineView: View {
                 showDataCard: { showDataCard(run) },
                 openBenchMode: { openBenchMode(run) },
                 removeRun: canRemove(run) ? { removeRun(run) } : nil,
-                updateTime: { newTime in
-                    // Time update needs to be handled by recreating the run
-                },
-                updateRun: { newTitle, newProject in
-                    onUpdateRun(run, newTitle, newProject)
+                updateRun: { updatedRun in
+                    onUpdateRun(updatedRun)
                     showRunDetail = nil
-                },
-                updateSteps: { newSteps in
-                    onUpdateRun(run, run.title, run.projectID)
                 },
                 pauseTimer: { pauseTimer($0) },
                 resumeTimer: { resumeTimer($0) },
@@ -1939,9 +1939,7 @@ private struct RunDetailSheet: View {
     let showDataCard: () -> Void
     let openBenchMode: () -> Void
     let removeRun: (() -> Void)?
-    let updateTime: (String) -> Void
-    let updateRun: ((String, String?) -> Void)?  // (title, projectID)
-    let updateSteps: (([LabStep]) -> Void)?
+    let updateRun: ((LabRun) -> Void)?
     let pauseTimer: ((ActiveLabTimer) -> Void)?
     let resumeTimer: ((ActiveLabTimer) -> Void)?
     let stopTimer: ((ActiveLabTimer) -> Void)?
@@ -2164,13 +2162,19 @@ private struct RunDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("保存") {
-                        let title = editedTitle.trimmingCharacters(in: .whitespaces)
-                        if !title.isEmpty {
-                            updateRun?(title, selectedProjectID)
-                        }
-                        if editableSteps != run.steps {
-                            updateSteps?(editableSteps)
-                        }
+                        let trimmedTitle = editedTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let updatedRun = LabRun(
+                            id: run.id,
+                            title: trimmedTitle.isEmpty ? run.title : trimmedTitle,
+                            area: run.area,
+                            timeLabel: String(format: "%02d:%02d", selectedHour, selectedMinute),
+                            status: run.status,
+                            protocolName: run.protocolName,
+                            scaledVolumeLabel: run.scaledVolumeLabel,
+                            projectID: selectedProjectID,
+                            steps: editableSteps
+                        )
+                        updateRun?(updatedRun)
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -2189,7 +2193,6 @@ private struct RunDetailSheet: View {
                     hour: $selectedHour,
                     minute: $selectedMinute,
                     onApply: {
-                        updateTime(String(format: "%02d:%02d", selectedHour, selectedMinute))
                         showingTimePicker = false
                     }
                 )

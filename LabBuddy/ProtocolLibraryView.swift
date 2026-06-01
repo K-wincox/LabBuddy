@@ -369,6 +369,9 @@ struct ProtocolDetailView: View {
         case .cell: return .teal
         case .cloning: return .blue
         case .blot: return .purple
+        case .animal: return .orange
+        case .nucleic: return .indigo
+        case .protein: return .pink
         default: return .gray
         }
     }
@@ -714,6 +717,9 @@ struct AreaBadge: View {
         case .cell: return .teal
         case .cloning: return .blue
         case .blot: return .purple
+        case .animal: return .orange
+        case .nucleic: return .indigo
+        case .protein: return .pink
         default: return .gray
         }
     }
@@ -739,8 +745,6 @@ struct ProtocolEditorSheet: View {
         let raw = UserDefaults.standard.string(forKey: "customWorkflowAreas") ?? ""
         return raw.isEmpty ? [] : raw.split(separator: ",").map(String.init)
     }()
-    @State private var showingAddArea = false
-    @State private var newAreaName = ""
     @State private var durationValue: Double
     @State private var durationUnit: String
 
@@ -781,14 +785,6 @@ struct ProtocolEditorSheet: View {
                         }
                     }
 
-                    Button {
-                        newAreaName = ""
-                        showingAddArea = true
-                    } label: {
-                        Label("新建实验类型", systemImage: "plus.circle")
-                            .foregroundStyle(.teal)
-                    }
-
                     HStack {
                         Text("基准体积")
                         Spacer()
@@ -826,19 +822,6 @@ struct ProtocolEditorSheet: View {
                 } header: {
                     Label("基础信息", systemImage: "doc.text")
                         .foregroundStyle(accent)
-                }
-                .alert("新建实验类型", isPresented: $showingAddArea) {
-                    TextField("类型名称", text: $newAreaName)
-                    Button("添加") {
-                        let name = newAreaName.trimmingCharacters(in: .whitespaces)
-                        guard !name.isEmpty else { return }
-                        customAreas.append(name)
-                        UserDefaults.standard.set(customAreas.joined(separator: ","), forKey: "customWorkflowAreas")
-                        draft.area = .custom(name)
-                    }
-                    Button("取消", role: .cancel) { }
-                } message: {
-                    Text("新类型将出现在实验类型选择栏中")
                 }
 
                 // MARK: 配方成分
@@ -900,8 +883,8 @@ struct ProtocolEditorSheet: View {
 
                 // MARK: 实验步骤
                 Section {
-                    ForEach($draft.steps.indices, id: \.self) { idx in
-                        let stepBinding = $draft.steps[idx]
+                    ForEach($draft.steps) { $step in
+                        let idx = draft.steps.firstIndex(where: { $0.id == step.id }) ?? 0
                         VStack(alignment: .leading, spacing: 10) {
                             // 步骤标题行
                             HStack(spacing: 8) {
@@ -910,12 +893,13 @@ struct ProtocolEditorSheet: View {
                                     .frame(width: 24, height: 24)
                                     .background(accent.opacity(0.15), in: Circle())
                                     .foregroundStyle(accent)
-                                TextField("步骤名称", text: stepBinding.title)
+                                TextField("步骤名称", text: $step.title)
                                     .font(.subheadline.weight(.semibold))
+                                Spacer()
                             }
 
                             // 操作描述（多行）
-                            TextField("操作描述", text: stepBinding.detail, axis: .vertical)
+                            TextField("操作描述", text: $step.detail, axis: .vertical)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2...6)
@@ -927,8 +911,8 @@ struct ProtocolEditorSheet: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 TextField("时长（分钟）", value: Binding(
-                                    get: { stepBinding.wrappedValue.durationMinutes },
-                                    set: { stepBinding.wrappedValue.durationMinutes = $0 }
+                                    get: { step.durationMinutes },
+                                    set: { $step.wrappedValue.durationMinutes = $0 }
                                 ), format: .number)
                                 .font(.subheadline)
                                 .frame(width: 80)
@@ -937,18 +921,19 @@ struct ProtocolEditorSheet: View {
                             }
                             .padding(.leading, 32)
 
-                            // 试剂列表
-                            if !stepBinding.wrappedValue.reagents.isEmpty {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    ForEach(stepBinding.reagents) { $reagent in
+                            // 试剂列表（长按删除）
+                            if !step.reagents.isEmpty {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    ForEach($step.reagents) { $reagent in
                                         ReagentEditorRow(
                                             reagent: $reagent,
                                             variables: draft.variables,
-                                            accent: accent
+                                            accent: accent,
+                                            onDelete: {
+                                                $step.wrappedValue.reagents.removeAll { $0.id == reagent.id }
+                                            }
                                         )
-                                    }
-                                    .onDelete { offsets in
-                                        stepBinding.wrappedValue.reagents.remove(atOffsets: offsets)
+                                        .padding(.vertical, 4)
                                     }
                                 }
                                 .padding(.leading, 32)
@@ -956,14 +941,15 @@ struct ProtocolEditorSheet: View {
 
                             // 增加试剂按钮
                             Button {
-                                stepBinding.wrappedValue.reagents.append(
+                                $step.wrappedValue.reagents.append(
                                     StepReagent(id: UUID().uuidString, name: "新试剂", amountExpression: "1", unit: draft.volumeUnit)
                                 )
                             } label: {
                                 Label("增加试剂", systemImage: "plus.circle")
-                                    .font(.caption)
+                                    .font(.subheadline)
                                     .foregroundStyle(accent)
                             }
+                            .buttonStyle(.plain)
                             .padding(.leading, 32)
                         }
                         .padding(.vertical, 4)
@@ -1022,7 +1008,9 @@ private struct ReagentEditorRow: View {
     @Binding var reagent: StepReagent
     let variables: [ProtocolVariable]
     let accent: Color
+    var onDelete: (() -> Void)? = nil
     @State private var showFormulaPicker = false
+
 
     private var varDict: [String: Double] {
         var d: [String: Double] = [:]
@@ -1043,7 +1031,16 @@ private struct ReagentEditorRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Circle().fill(accent.opacity(0.35)).frame(width: 5, height: 5)
+            // 删除按钮（最左边，与增加试剂按钮对齐）
+            if let onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.red.opacity(0.7))
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+            }
 
             // 试剂名
             TextField("试剂名称", text: $reagent.name)
@@ -1304,10 +1301,6 @@ struct ProtocolExtractionSheet: View {
 // Consistency check helper (shared)
 func protocolConsistencyIssues(_ labProtocol: LabProtocol) -> [String] {
     var issues: [String] = []
-    let ingredientTotal = labProtocol.ingredients.reduce(0) { $0 + $1.standardAmount }
-    if abs(ingredientTotal - labProtocol.baseVolume) > max(0.2, labProtocol.baseVolume * 0.08) {
-        issues.append("成分总量与基准体积不一致")
-    }
     let symbols = Set(labProtocol.variables.map(\.symbol))
     let missingRefs = labProtocol.steps.flatMap(\.variableRefs).filter { !symbols.contains($0) }
     if let first = missingRefs.first { issues.append("步骤引用了未定义变量 \(first)") }
@@ -1329,6 +1322,9 @@ struct ProtocolShareCard: View {
         case .cell: return .teal
         case .cloning: return .blue
         case .blot: return .purple
+        case .animal: return .orange
+        case .nucleic: return .indigo
+        case .protein: return .pink
         default: return .gray
         }
     }

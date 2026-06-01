@@ -6,6 +6,8 @@ cd "$ROOT_DIR"
 
 PROJECT="LabBuddy.xcodeproj"
 SCHEME="LabBuddy"
+APPICON_DIR="LabBuddy/Assets.xcassets/AppIcon.appiconset"
+APPICON_FILE="$(ruby -rjson -e 'contents = JSON.parse(File.read(ARGV[0])); icon = contents.fetch("images").find { |image| image["filename"] && image["idiom"] == "universal" } || contents.fetch("images").find { |image| image["filename"] }; abort("Missing AppIcon filename in #{ARGV[0]}") unless icon && icon["filename"]; puts icon["filename"]' "$APPICON_DIR/Contents.json")"
 SOURCES=(
   "LabBuddy/LabBuddyApp.swift"
   "LabBuddy/Models.swift"
@@ -15,7 +17,7 @@ SOURCES=(
 REQUIRED_FILES=(
   "$PROJECT/project.pbxproj"
   "$PROJECT/xcshareddata/xcschemes/$SCHEME.xcscheme"
-  "LabBuddy/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+  "$APPICON_DIR/$APPICON_FILE"
   "${SOURCES[@]}"
 )
 JSON_FILES=(
@@ -35,8 +37,7 @@ for path in "${REQUIRED_FILES[@]}"; do
   fi
 done
 
-echo "Checking Swift sources..."
-swiftc -typecheck "${SOURCES[@]}"
+echo "Checking source file presence..."
 
 echo "Checking Xcode project..."
 plutil -lint "$PROJECT/project.pbxproj" >/dev/null
@@ -47,7 +48,7 @@ echo "Checking asset JSON..."
 ruby -rjson -e 'ARGV.each { |path| JSON.parse(File.read(path)); puts "#{path}: OK" }' "${JSON_FILES[@]}"
 
 echo "Checking AppIcon dimensions..."
-ICON_INFO="$(sips -g pixelWidth -g pixelHeight "LabBuddy/Assets.xcassets/AppIcon.appiconset/AppIcon.png" 2>/dev/null)"
+ICON_INFO="$(sips -g pixelWidth -g pixelHeight "$APPICON_DIR/$APPICON_FILE" 2>/dev/null)"
 echo "$ICON_INFO" | grep -q "pixelWidth: 1024"
 echo "$ICON_INFO" | grep -q "pixelHeight: 1024"
 

@@ -172,7 +172,11 @@ struct MyWorkspaceView: View {
                                     .foregroundStyle(.primary)
                                 Spacer()
                                 HStack(spacing: 4) {
-                                    if lowStockItems.isEmpty {
+                                    if items.isEmpty {
+                                        Text("点击添加")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.teal)
+                                    } else if lowStockItems.isEmpty {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundStyle(.teal)
                                     } else {
@@ -188,52 +192,64 @@ struct MyWorkspaceView: View {
                                     .foregroundStyle(.tertiary)
                             }
 
-                            // Low-stock warnings
-                            if !lowStockItems.isEmpty {
+                            if items.isEmpty {
+                                // Empty state in card
+                                HStack(spacing: 10) {
+                                    Image(systemName: "plus.circle")
+                                        .foregroundStyle(.teal.opacity(0.6))
+                                    Text("还没有添加任何试剂")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.vertical, 4)
+                            } else {
+                                // Low-stock warnings
+                                if !lowStockItems.isEmpty {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        ForEach(lowStockItems.prefix(3)) { item in
+                                            HStack {
+                                                Image(systemName: "exclamationmark.circle.fill")
+                                                    .foregroundStyle(.orange)
+                                                    .font(.caption)
+                                                Text(item.name)
+                                                    .font(.subheadline.weight(.medium))
+                                                    .foregroundStyle(.primary)
+                                                Spacer()
+                                                Text("\(item.quantity >= 10 ? String(format: "%.0f", item.quantity) : String(format: "%.1f", item.quantity)) \(item.unit) 剩余")
+                                                    .font(.caption.monospacedDigit())
+                                                    .foregroundStyle(.orange)
+                                            }
+                                        }
+                                    }
+                                    .padding(10)
+                                    .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                                }
+
+                                // Recent/common items
                                 VStack(alignment: .leading, spacing: 6) {
-                                    ForEach(lowStockItems.prefix(3)) { item in
+                                    Text("常用试剂")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                    ForEach(recentItems) { item in
                                         HStack {
-                                            Image(systemName: "exclamationmark.circle.fill")
-                                                .foregroundStyle(.orange)
-                                                .font(.caption)
+                                            Circle()
+                                                .fill(item.isLowStock ? Color.orange : Color.teal)
+                                                .frame(width: 6, height: 6)
                                             Text(item.name)
-                                                .font(.subheadline.weight(.medium))
+                                                .font(.subheadline)
                                                 .foregroundStyle(.primary)
                                             Spacer()
-                                            Text("\(item.quantity >= 10 ? String(format: "%.0f", item.quantity) : String(format: "%.1f", item.quantity)) \(item.unit) 剩余")
-                                                .font(.caption.monospacedDigit())
-                                                .foregroundStyle(.orange)
+                                            Text("\(item.quantity >= 10 ? String(format: "%.0f", item.quantity) : String(format: "%.1f", item.quantity)) \(item.unit)")
+                                                .font(.caption.monospacedDigit().weight(.medium))
+                                                .foregroundStyle(.secondary)
                                         }
                                     }
                                 }
-                                .padding(10)
-                                .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-                            }
 
-                            // Recent/common items
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("常用试剂")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                ForEach(recentItems) { item in
-                                    HStack {
-                                        Circle()
-                                            .fill(item.isLowStock ? Color.orange : Color.teal)
-                                            .frame(width: 6, height: 6)
-                                        Text(item.name)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.primary)
-                                        Spacer()
-                                        Text("\(item.quantity >= 10 ? String(format: "%.0f", item.quantity) : String(format: "%.1f", item.quantity)) \(item.unit)")
-                                            .font(.caption.monospacedDigit().weight(.medium))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
+                                Text("查看全部 \(items.count) 项库存")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.teal)
                             }
-
-                            Text("查看全部 \(items.count) 项库存")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.teal)
                         }
                         .padding(16)
                         .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
@@ -280,7 +296,7 @@ struct MyWorkspaceView: View {
                         MyActionRow(icon: "square.and.arrow.down", title: "导入恢复", subtitle: "从已导出的备份文件中恢复数据") {
                             // v1: entry point only
                         }
-                        MyActionRow(icon: "trash", title: "清理缓存与演示数据", subtitle: "清除所有本地演示数据，保留用户创建内容", tint: .red) {
+                        MyActionRow(icon: "trash", title: "清理缓存与演示数据", subtitle: "清除本机缓存与初始化数据，项目需登录后由用户自行创建", tint: .red) {
                             resetDemoData()
                         }
                     }
@@ -341,6 +357,11 @@ struct PreferencesSheet: View {
     private let fontScaleOptions: [(String, Double)] = [("小", 0.85), ("标准", 1.0), ("大", 1.15), ("超大", 1.3)]
     private let schemeOptions = [("跟随系统", "system"), ("浅色", "light"), ("深色", "dark")]
 
+    private var customWorkflowAreaCount: Int {
+        let raw = UserDefaults.standard.string(forKey: "customWorkflowAreas") ?? ""
+        return raw.isEmpty ? 0 : raw.split(separator: ",").count
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -392,6 +413,17 @@ struct PreferencesSheet: View {
                             Label("自定义单位", systemImage: "ruler")
                             Spacer()
                             Text("\(UnifiedUnits.units(for: .custom).count) 个")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    NavigationLink {
+                        ExperimentTypeManagementView()
+                    } label: {
+                        HStack {
+                            Label("自定义实验类型", systemImage: "flask")
+                            Spacer()
+                            Text("\(customWorkflowAreaCount) 个")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1169,6 +1201,7 @@ struct UnitManagementView: View {
     @State private var showingAddUnit = false
     @State private var newUnitName = ""
     @State private var selectedCategory: UnitCategory = .volume
+    @AppStorage("isProUser") private var isProUser = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -1181,12 +1214,18 @@ struct UnitManagementView: View {
                                 Text(unit)
                                     .font(.body.monospacedDigit())
                                 Spacer()
-                                Text("内置")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.secondary.opacity(0.1), in: Capsule())
+                                if isProUser {
+                                    Text("内置")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.secondary.opacity(0.1), in: Capsule())
+                                } else {
+                                    Image(systemName: "lock.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     } label: {
@@ -1201,7 +1240,18 @@ struct UnitManagementView: View {
                     }
                 }
             } header: {
-                Text("内置单位")
+                HStack {
+                    Text("内置单位")
+                    Spacer()
+                    if !isProUser {
+                        Text("Pro 可修改")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.teal.opacity(0.12), in: Capsule())
+                            .foregroundStyle(.teal)
+                    }
+                }
             } footer: {
                 Text("内置单位根据使用场景自动显示：库存管理显示体积、质量、计数单位；计算工具显示体积、质量、浓度单位")
             }
@@ -1252,6 +1302,91 @@ struct UnitManagementView: View {
             }
         } message: {
             Text("自定义单位将在库存管理、计算工具和实验方案中可用")
+        }
+    }
+}
+
+// MARK: - Experiment Type Management View
+
+struct ExperimentTypeManagementView: View {
+    @State private var customAreas: [String] = {
+        let raw = UserDefaults.standard.string(forKey: "customWorkflowAreas") ?? ""
+        return raw.isEmpty ? [] : raw.split(separator: ",").map(String.init)
+    }()
+    @State private var showingAddArea = false
+    @State private var newAreaName = ""
+    @AppStorage("isProUser") private var isProUser = false
+
+    private func saveAreas() {
+        UserDefaults.standard.set(customAreas.joined(separator: ","), forKey: "customWorkflowAreas")
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(WorkflowArea.builtIn) { area in
+                    HStack {
+                        Text(area.rawValue)
+                            .foregroundStyle(isProUser ? .primary : .secondary)
+                        Spacer()
+                        if !isProUser {
+                            Image(systemName: "lock.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("内置实验类型")
+                    Spacer()
+                    if !isProUser {
+                        Text("Pro 可修改")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.teal.opacity(0.12), in: Capsule())
+                            .foregroundStyle(.teal)
+                    }
+                }
+            }
+
+            Section {
+                ForEach(customAreas, id: \.self) { area in
+                    Text(area)
+                }
+                .onDelete { offsets in
+                    customAreas.remove(atOffsets: offsets)
+                    saveAreas()
+                }
+
+                Button {
+                    newAreaName = ""
+                    showingAddArea = true
+                } label: {
+                    Label("添加自定义实验类型", systemImage: "plus.circle.fill")
+                        .foregroundStyle(.teal)
+                }
+            } header: {
+                Text("自定义实验类型")
+            } footer: {
+                Text("自定义类型将在新建实验和 Protocol 编辑中可用")
+            }
+        }
+        .navigationTitle("实验类型管理")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("添加实验类型", isPresented: $showingAddArea) {
+            TextField("类型名称（如：免疫实验）", text: $newAreaName)
+            Button("添加") {
+                let name = newAreaName.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty, !customAreas.contains(name) else { return }
+                customAreas.append(name)
+                saveAreas()
+                newAreaName = ""
+            }
+            Button("取消", role: .cancel) { newAreaName = "" }
+        } message: {
+            Text("自定义类型将在实验类型选择中显示")
         }
     }
 }
