@@ -2931,26 +2931,30 @@ private struct BenchModeView: View {
     }
 
     private var benchModeToggleBar: some View {
-        HStack {
-            Spacer()
-            Button {
-                var transaction = Transaction(animation: nil)
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    layoutMode = layoutMode == .full ? .compact : .full
+        Group {
+            if layoutMode == .compact {
+                HStack {
+                    Spacer()
+                    Button {
+                        var transaction = Transaction(animation: nil)
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            layoutMode = .full
+                        }
+                    } label: {
+                        Label("切换大屏模式", systemImage: "rectangle.split.1x2")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(chipColor.opacity(0.12), in: Capsule())
+                            .foregroundStyle(chipColor)
+                    }
+                    .buttonStyle(.plain)
                 }
-            } label: {
-                Label(layoutMode == .full ? "切换详细列表" : "切换大屏模式", systemImage: "rectangle.split.1x2")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(chipColor.opacity(0.12), in: Capsule())
-                    .foregroundStyle(chipColor)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
             }
-            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 12)
         .animation(nil, value: layoutMode)
     }
 
