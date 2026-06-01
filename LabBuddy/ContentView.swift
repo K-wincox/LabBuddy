@@ -2621,7 +2621,7 @@ private struct BenchModeView: View {
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             Color.labBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -2863,6 +2863,7 @@ private struct BenchModeView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .padding(.bottom, 20)
             .animation(nil, value: layoutMode)
 
@@ -2870,6 +2871,7 @@ private struct BenchModeView: View {
                 benchModeHeader
                 Spacer()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             // Timer finished flash overlay
             if showTimerFlash {
@@ -2979,6 +2981,7 @@ private struct BenchModeView: View {
                 }
                 .fixedSize(horizontal: true, vertical: false)
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .transaction { transaction in
                 transaction.animation = nil
             }
