@@ -2933,8 +2933,12 @@ private struct BenchModeView: View {
 
                 HStack(spacing: 12) {
                     Button {
-                        layoutMode = layoutMode == .full ? .compact : .full
-                        compactCards = layoutMode == .compact
+                        var transaction = Transaction(animation: nil)
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            layoutMode = layoutMode == .full ? .compact : .full
+                            compactCards = layoutMode == .compact
+                        }
                     } label: {
                         Image(systemName: "rectangle.split.1x2")
                             .font(.system(size: 18, weight: .semibold))
@@ -2966,6 +2970,7 @@ private struct BenchModeView: View {
             .transaction { transaction in
                 transaction.animation = nil
             }
+            .animation(nil, value: layoutMode)
             .padding(.horizontal, 20)
             .padding(.top, 16)
             .padding(.bottom, 10)
@@ -2985,6 +2990,7 @@ private struct BenchModeView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
         }
+        .animation(nil, value: layoutMode)
     }
 
     // MARK: - Reagent Amount View
