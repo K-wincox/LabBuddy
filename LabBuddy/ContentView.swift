@@ -2912,6 +2912,10 @@ private struct BenchModeView: View {
         } message: {
             Text("所有步骤已完成，是否生成结果卡片？")
         }
+        .onDisappear {
+            // 退出时才持久化偏好，避免切换时写 @AppStorage 触发全局重绘
+            compactCards = layoutMode == .compact
+        }
     }
 
     private var benchModeHeader: some View {
@@ -2937,7 +2941,7 @@ private struct BenchModeView: View {
                         transaction.disablesAnimations = true
                         withTransaction(transaction) {
                             layoutMode = layoutMode == .full ? .compact : .full
-                            compactCards = layoutMode == .compact
+                            // 不在这里写 @AppStorage，避免触发全局重绘动画
                         }
                     } label: {
                         Image(systemName: "rectangle.split.1x2")
