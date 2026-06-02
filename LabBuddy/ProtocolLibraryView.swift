@@ -1564,7 +1564,7 @@ struct ProtocolExtractionSheet: View {
         case .image:
             "拍摄纸质材料，或从相册选择已有图片/截图，并用本地 OCR 识别 Protocol。"
         case .kitManual:
-            "从 SOP 或试剂盒 PDF 提取文字；扫描版 PDF 暂时请先转成图片再用 OCR。"
+            "从 SOP 或试剂盒 PDF 提取文字；扫描版 PDF 会自动按页 OCR。"
         case .sop:
             "从实验室标准操作规程 PDF 中提取步骤、时间、温度、转速和试剂。"
         case .literature:
@@ -1610,11 +1610,11 @@ struct ProtocolExtractionSheet: View {
             statusMessage = "正在读取 PDF..."
             Task {
                 do {
-                    let text = try ProtocolTextExtractionService.extractText(fromPDF: url, preferMethods: sourceType == .literature)
+                    let result = try await ProtocolTextExtractionService.extractText(fromPDF: url, preferMethods: sourceType == .literature)
                     await MainActor.run {
                         sourceTitle = sourceTitle.isEmpty ? url.deletingPathExtension().lastPathComponent : sourceTitle
-                        extractedText = text
-                        statusMessage = text.isEmpty ? "PDF 没有可提取文本。扫描版请先使用拍照或相册 OCR。" : "PDF 文本提取完成，请核对草稿。"
+                        extractedText = result.text
+                        statusMessage = result.statusMessage
                         isProcessing = false
                     }
                 } catch {
@@ -1632,6 +1632,28 @@ struct ProtocolExtractionSheet: View {
 }
 
 enum ProtocolTextExtractionService {
+    struct PDFExtractionResult {
+        let text: String
+        let usedOCR: Bool
+        let pageCount: Int
+        let ocrPageCount: Int
+
+        var statusMessage: String {
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return usedOCR ? "扫描版 PDF OCR 完成，但没有识别到文字。请检查文件清晰度。" : "PDF 没有可提取文本。"
+            }
+            if usedOCR {
+                let limitNote = pageCount > ocrPageCount ? "，较长 PDF 先处理前 \(ocrPageCount) 页" : ""
+                return "扫描版 PDF OCR 完成：已识别 \(ocrPageCount)/\(pageCount) 页\(limitNote)，请核对草稿。"
+            }
+            return "PDF 文本提取完成，请核对草稿。"
+        }
+    }
+
+    private static let minimumUsefulPDFTextLength = 80
+    private static let maxOCRPages = 12
+    private static let pdfRenderScale = 2.0
+
     static func recognizeText(in image: UIImage) async throws -> String {
         guard let cgImage = image.cgImage else { return "" }
         return try await withCheckedThrowingContinuation { continuation in
@@ -1658,12 +1680,14 @@ enum ProtocolTextExtractionService {
         }
     }
 
-    static func extractText(fromPDF url: URL, preferMethods: Bool) throws -> String {
+    static func extractText(fromPDF url: URL, preferMethods: Bool) async throws -> PDFExtractionResult {
         let didStart = url.startAccessingSecurityScopedResource()
         defer {
             if didStart { url.stopAccessingSecurityScopedResource() }
         }
-        guard let document = PDFDocument(url: url) else { return "" }
+        guard let document = PDFDocument(url: url) else {
+            return PDFExtractionResult(text: "", usedOCR: false, pageCount: 0, ocrPageCount: 0)
+        }
         var pages: [String] = []
         for index in 0..<document.pageCount {
             guard let page = document.page(at: index), let text = page.string else { continue }
@@ -1671,8 +1695,49 @@ enum ProtocolTextExtractionService {
             if !trimmed.isEmpty { pages.append(trimmed) }
         }
         let fullText = pages.joined(separator: "\n\n")
-        guard preferMethods else { return fullText }
-        return methodsSection(from: fullText)
+        if fullText.trimmingCharacters(in: .whitespacesAndNewlines).count >= minimumUsefulPDFTextLength {
+            let finalText = preferMethods ? methodsSection(from: fullText) : fullText
+            return PDFExtractionResult(text: finalText, usedOCR: false, pageCount: document.pageCount, ocrPageCount: 0)
+        }
+
+        let ocrTexts = try await ocrScannedPDF(document)
+        let ocrText = ocrTexts.joined(separator: "\n\n")
+        let finalText = preferMethods ? methodsSection(from: ocrText) : ocrText
+        return PDFExtractionResult(text: finalText, usedOCR: true, pageCount: document.pageCount, ocrPageCount: ocrTexts.count)
+    }
+
+    private static func ocrScannedPDF(_ document: PDFDocument) async throws -> [String] {
+        var texts: [String] = []
+        let pageLimit = min(document.pageCount, maxOCRPages)
+        for index in 0..<pageLimit {
+            guard let page = document.page(at: index),
+                  let image = renderPageForOCR(page) else { continue }
+            let text = try await recognizeText(in: image)
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                texts.append("Page \(index + 1)\n\(trimmed)")
+            }
+        }
+        return texts
+    }
+
+    private static func renderPageForOCR(_ page: PDFPage) -> UIImage? {
+        let pageBounds = page.bounds(for: .mediaBox)
+        guard pageBounds.width > 0, pageBounds.height > 0 else { return nil }
+        let size = CGSize(width: pageBounds.width * pdfRenderScale, height: pageBounds.height * pdfRenderScale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return renderer.image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            context.cgContext.saveGState()
+            context.cgContext.scaleBy(x: pdfRenderScale, y: pdfRenderScale)
+            context.cgContext.translateBy(x: -pageBounds.origin.x, y: -pageBounds.origin.y)
+            page.draw(with: .mediaBox, to: context.cgContext)
+            context.cgContext.restoreGState()
+        }
     }
 
     private static func methodsSection(from text: String) -> String {
