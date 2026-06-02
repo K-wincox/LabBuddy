@@ -183,7 +183,6 @@ struct DayTimelineView: View {
                 projects: projects,
                 startTimer: { step, customMin in startTimer(run, step, customMin) },
                 showDataCard: { showDataCard(run) },
-                openBenchMode: { openBenchMode(run) },
                 removeRun: canRemove(run) ? { removeRun(run) } : nil,
                 updateRun: { updatedRun in
                     onUpdateRun(updatedRun)
@@ -551,7 +550,6 @@ private struct RunDetailSheet: View {
     let projects: [Project]
     let startTimer: (LabStep?, Int?) -> Void  // (step, customMinutes)
     let showDataCard: () -> Void
-    let openBenchMode: () -> Void
     let removeRun: (() -> Void)?
     let updateRun: ((LabRun) -> Void)?
     let pauseTimer: ((ActiveLabTimer) -> Void)?
@@ -605,7 +603,7 @@ private struct RunDetailSheet: View {
                             }
                         }
                         .padding(12)
-                        .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
                         .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
 
                         // Time
@@ -630,7 +628,7 @@ private struct RunDetailSheet: View {
                             Spacer(minLength: 0)
                         }
                         .padding(12)
-                        .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
                         .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
                     }
 
@@ -642,7 +640,9 @@ private struct RunDetailSheet: View {
                                 Text("\(index + 1)")
                                     .font(.title2.monospacedDigit().weight(.bold))
                                     .foregroundStyle(.teal)
-                                    .frame(width: 28)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                    .frame(width: 38, alignment: .center)
 
                                 // Step content
                                 VStack(alignment: .leading, spacing: 4) {
@@ -798,15 +798,6 @@ private struct RunDetailSheet: View {
                         dismiss()
                     }
                     .fontWeight(.semibold)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        openBenchMode()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "rectangle.split.1x2")
-                    }
-                    .accessibilityLabel("进入实验台模式")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
