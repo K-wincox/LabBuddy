@@ -55,6 +55,10 @@ extension LabRun {
     var endMinuteOfDay: Int {
         min(startMinuteOfDay + scheduledDurationMinutes, 24 * 60)
     }
+
+    var timeRangeLabel: String {
+        "\(timeLabel)-\(timeLabelFromMinutes(endMinuteOfDay))"
+    }
 }
 
 extension Array where Element == LabRun {

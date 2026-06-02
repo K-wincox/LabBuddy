@@ -348,7 +348,7 @@ private struct RunChip: View {
                     .frame(height: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(run.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                    Text("\(run.protocolName) · \(doneCount)/\(run.steps.count)步").font(.caption).foregroundStyle(.secondary)
+                    Text("\(run.timeRangeLabel) · \(doneCount)/\(run.steps.count)步").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 3) {
@@ -421,7 +421,7 @@ private struct ExpandedRunCard: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(run.title).font(.headline).lineLimit(1)
                         HStack(spacing: 4) {
-                            Text(run.protocolName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            Text(run.timeRangeLabel).font(.caption.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
                         }
                     }
                 }
@@ -463,6 +463,7 @@ private struct ExpandedRunCard: View {
                             Text(highlightedLabParameters(step.detail))
                                 .font(.subheadline)
                                 .lineLimit(2)
+                                .strikethrough(completedStepIDs.contains(step.id))
                         }
                         Spacer()
                         if let dur = step.durationMinutes {
