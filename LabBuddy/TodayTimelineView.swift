@@ -1150,33 +1150,28 @@ private struct DynamicHourBlock: View {
                 Color.clear
                     .frame(height: zoom == .overview ? 24 : 32)
             } else {
-                ZStack(alignment: .topLeading) {
-                    ForEach(runs.sorted(by: { minuteFrom($0.timeLabel) < minuteFrom($1.timeLabel) })) { run in
-                        let layout = eventLayout(for: run)
-                        RunDurationEvent(
-                            run: run,
-                            zoom: zoom,
-                            height: layout.cardHeight,
-                            startsOnHourLine: run.startMinuteOfDay % 60 == 0,
-                            completedStepIDs: completedStepIDs,
-                            activeTimer: activeTimers.first { $0.runID == run.id },
-                            projects: projects,
-                            onTapRun: { onTapRun(run) },
-                            onStart: { step in onStart(run, step, nil) },
-                            onCard: { onCard(run) },
-                            onBench: { onBench(run) },
-                            onRemove: { onRemove(run) },
-                            onToggleStep: onToggleStep,
-                            onPause: { if let t = activeTimers.first(where: { $0.runID == run.id }) { onPauseTimer?(t) } },
-                            onResume: { if let t = activeTimers.first(where: { $0.runID == run.id }) { onResumeTimer?(t) } },
-                            onStop: { if let t = activeTimers.first(where: { $0.runID == run.id }) { onStopTimer?(t) } }
-                        )
-                        .offset(y: layout.y)
+                Group {
+                    if zoom == .overview {
+                        ZStack(alignment: .topLeading) {
+                            ForEach(runs.sorted(by: { minuteFrom($0.timeLabel) < minuteFrom($1.timeLabel) })) { run in
+                                let layout = eventLayout(for: run)
+                                durationEvent(for: run, minHeight: layout.cardHeight)
+                                    .offset(y: layout.y)
+                            }
+                        }
+                        .frame(height: eventAreaHeight)
+                    } else {
+                        VStack(alignment: .leading, spacing: 14) {
+                            ForEach(runs.sorted(by: { minuteFrom($0.timeLabel) < minuteFrom($1.timeLabel) })) { run in
+                                let layout = eventLayout(for: run)
+                                durationEvent(for: run, minHeight: 0)
+                                    .padding(.top, layout.y)
+                            }
+                        }
                     }
                 }
-                .frame(height: eventAreaHeight)
                 .padding(.top, 8)
-                .padding(.bottom, 8)
+                .padding(.bottom, 16)
                 .padding(.trailing, 8)
             }
 
@@ -1203,18 +1198,39 @@ private struct DynamicHourBlock: View {
         let startOffset = CGFloat(run.startMinuteOfDay - hour * 60)
         let y = max(0, startOffset) * minuteHeight
         let durationHeight = CGFloat(run.scheduledDurationMinutes) * minuteHeight
-        let contentMinimum: CGFloat = zoom == .overview ? 64 : CGFloat(max(180, run.steps.count * 42 + 150))
+        let contentMinimum: CGFloat = zoom == .overview ? 64 : CGFloat(max(240, run.steps.count * 58 + 150))
         let cardHeight = max(durationHeight, contentMinimum)
         let startRuleHeight: CGFloat = run.startMinuteOfDay % 60 == 0 ? 0 : 18
-        let endRuleHeight: CGFloat = 26
+        let endRuleHeight: CGFloat = 34
         return (y, cardHeight, y + startRuleHeight + cardHeight + endRuleHeight)
+    }
+
+    private func durationEvent(for run: LabRun, minHeight: CGFloat) -> some View {
+        RunDurationEvent(
+            run: run,
+            zoom: zoom,
+            minHeight: minHeight,
+            startsOnHourLine: run.startMinuteOfDay % 60 == 0,
+            completedStepIDs: completedStepIDs,
+            activeTimer: activeTimers.first { $0.runID == run.id },
+            projects: projects,
+            onTapRun: { onTapRun(run) },
+            onStart: { step in onStart(run, step, nil) },
+            onCard: { onCard(run) },
+            onBench: { onBench(run) },
+            onRemove: { onRemove(run) },
+            onToggleStep: onToggleStep,
+            onPause: { if let t = activeTimers.first(where: { $0.runID == run.id }) { onPauseTimer?(t) } },
+            onResume: { if let t = activeTimers.first(where: { $0.runID == run.id }) { onResumeTimer?(t) } },
+            onStop: { if let t = activeTimers.first(where: { $0.runID == run.id }) { onStopTimer?(t) } }
+        )
     }
 }
 
 private struct RunDurationEvent: View {
     let run: LabRun
     let zoom: TimelineZoom
-    let height: CGFloat
+    let minHeight: CGFloat
     let startsOnHourLine: Bool
     let completedStepIDs: Set<String>
     let activeTimer: ActiveLabTimer?
@@ -1255,7 +1271,7 @@ private struct RunDurationEvent: View {
                         onCard: onCard,
                         onRemove: onRemove
                     )
-                    .frame(minHeight: height, alignment: .top)
+                    .frame(minHeight: minHeight, alignment: .top)
                     .padding(.leading, 8)
                 } else {
                     ExpandedRunCard(
@@ -1273,10 +1289,11 @@ private struct RunDurationEvent: View {
                         onResume: onResume,
                         onStop: onStop
                     )
-                    .frame(minHeight: height, alignment: .top)
+                    .frame(minHeight: minHeight, alignment: .top)
                     .padding(.leading, 8)
                 }
             }
+            .padding(.bottom, 8)
 
             TimelineTimeRule(
                 label: timeLabelFromMinutes(run.endMinuteOfDay),
