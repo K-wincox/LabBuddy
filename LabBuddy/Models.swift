@@ -316,13 +316,29 @@ struct ProtocolSource: Hashable, Codable {
 }
 
 enum ProtocolSourceType: String, CaseIterable, Identifiable, Codable {
-    case camera = "拍照识别"
-    case photoLibrary = "相册导入"
+    case image = "图片识别"
     case sop = "SOP"
     case kitManual = "试剂盒手册"
     case literature = "文献"
 
     var id: String { rawValue }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        switch rawValue {
+        case "拍照识别", "相册导入", "图片识别":
+            self = .image
+        case "SOP":
+            self = .sop
+        case "试剂盒手册":
+            self = .kitManual
+        case "文献":
+            self = .literature
+        default:
+            self = .sop
+        }
+    }
 }
 
 struct CalculatorExample: Identifiable, Hashable {

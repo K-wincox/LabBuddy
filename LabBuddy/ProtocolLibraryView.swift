@@ -1390,25 +1390,25 @@ struct ProtocolExtractionSheet: View {
     private var sourceActions: some View {
         VStack(spacing: 10) {
             switch sourceType {
-            case .camera:
-                Button {
-                    showCamera = true
-                } label: {
-                    Label("拍摄并识别", systemImage: "camera.viewfinder")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.teal)
-                .controlSize(.large)
+            case .image:
+                HStack(spacing: 10) {
+                    Button {
+                        showCamera = true
+                    } label: {
+                        Label("拍照识别", systemImage: "camera.viewfinder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.teal)
+                    .controlSize(.large)
 
-            case .photoLibrary:
-                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                    Label("从相册选择图片", systemImage: "photo.on.rectangle")
-                        .frame(maxWidth: .infinity)
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        Label("相册导入", systemImage: "photo.on.rectangle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.teal)
-                .controlSize(.large)
 
             case .kitManual, .sop, .literature:
                 Button {
@@ -1552,8 +1552,7 @@ struct ProtocolExtractionSheet: View {
 
     private var sourceIcon: String {
         switch sourceType {
-        case .camera: "camera.viewfinder"
-        case .photoLibrary: "photo.on.rectangle"
+        case .image: "photo.on.rectangle.angled"
         case .literature: "doc.text.magnifyingglass"
         case .kitManual: "shippingbox"
         case .sop: "doc.text"
@@ -1562,10 +1561,8 @@ struct ProtocolExtractionSheet: View {
 
     private var sourceDescription: String {
         switch sourceType {
-        case .camera:
-            "现场拍摄纸质 SOP、试剂盒说明书或实验记录，并用本地 OCR 识别。"
-        case .photoLibrary:
-            "从已有图片、截图或拍好的说明书照片中识别 Protocol。"
+        case .image:
+            "拍摄纸质材料，或从相册选择已有图片/截图，并用本地 OCR 识别 Protocol。"
         case .kitManual:
             "从 SOP 或试剂盒 PDF 提取文字；扫描版 PDF 暂时请先转成图片再用 OCR。"
         case .sop:
