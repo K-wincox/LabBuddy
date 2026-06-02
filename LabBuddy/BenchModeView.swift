@@ -311,9 +311,8 @@ struct BenchModeView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(width: contentWidth)
 
-                    Text(currentStep.detail)
+                    Text(highlightedLabParameters(currentStep.detail))
                         .font(.system(size: 18, weight: .regular))
-                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .lineLimit(6)
                         .minimumScaleFactor(0.68)
@@ -658,9 +657,8 @@ struct BenchModeView: View {
                             .font(isCurrent ? .title3.weight(.bold) : .body.weight(.medium))
                             .strikethrough(isDone)
                             .foregroundStyle(isCurrent ? .primary : (isDone ? .secondary : .secondary))
-                        Text(step.detail)
+                        Text(highlightedLabParameters(step.detail))
                             .font(isCurrent ? .body : .subheadline)
-                            .foregroundStyle(isCurrent ? Color.secondary : Color.secondary.opacity(0.75))
                             .lineLimit(isCurrent ? nil : 2)
                             .fixedSize(horizontal: false, vertical: isCurrent)
                     }
