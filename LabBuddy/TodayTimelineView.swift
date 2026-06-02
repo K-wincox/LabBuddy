@@ -800,6 +800,15 @@ private struct RunDetailSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
+                        openBenchMode()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "rectangle.split.1x2")
+                    }
+                    .accessibilityLabel("进入实验台模式")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
                         showDataCard()
                         dismiss()
                     } label: {
