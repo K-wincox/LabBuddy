@@ -16,9 +16,8 @@ or:
 make preflight
 ```
 
-Expected result before Xcode is installed:
+Expected result before Xcode is installed or selected:
 
-- Swift source type-check passes.
 - Xcode project, scheme, assets, and AppIcon checks pass.
 - Script stops with the Xcode setup instruction.
 - `make preflight` exits with status 2 in this state; that is expected before full Xcode is selected.
@@ -56,17 +55,43 @@ Expected result:
 ## First Experience Checklist
 
 - App launches without sign-in.
-- Today is the first tab and shows wet-lab runs.
-- `实验台` opens a large-control bench execution view.
+- Today is the first tab and shows Past / Today / Tomorrow.
+- Today shows wet-lab runs as duration events on a calendar-like timeline with collapsed empty time.
+- Runs show visible start/end time rules; each run card sits between its time boundaries.
+- Tapping a run opens the detail editor.
+- Detail and Bench Mode can switch back and forth.
+- Bench Mode opens a large-control execution view for one active experiment.
+- Step numbers and lab quantities are highlighted where they are operationally important.
+- Step completion circles can be tapped; completed step title and detail are struck through.
 - Steps can be marked complete and stay complete after relaunch.
 - A labeled timer can be started from a run.
-- Protocol target volume can be changed and imported into Today.
-- Imported runs can be removed.
+- Today can add a run from a protocol template, a manual experiment, or a carryover placeholder.
+- Added Today/Tomorrow runs can be edited and removed where allowed.
+- Past can show archived experiment records by date.
 - Tools calculates mass, dilution, and percentage concentration results and copies the result.
-- Inventory shows seeded reagents, low-stock warning, deduct/restock controls, and reset.
+- My contains profile/preferences and opens Inventory.
+- Inventory shows seeded reagents, low-stock warning, deduct/restock controls, transaction history, and reset.
 - Completing a run opens a Data Card.
-- Data Card shows run metadata, `Powered by LabBuddy`, and a local report-summary draft that can be copied.
+- Data Card shows result media/preview, experiment conditions, run metadata, optional `Powered by LabBuddy` watermark, save, copy, and share actions.
+
+## Persistence Checklist
+
+These checks are local-only and should be verified by killing and relaunching the app on the same simulator or device:
+
+- Completed step IDs remain checked.
+- Active timers reload from local storage.
+- Added Today runs remain in Today.
+- Added Tomorrow runs remain in Tomorrow.
+- Ending the day archives runs into Past records.
+- Inventory item edits and quantity changes remain.
+- Inventory transaction history remains.
+- User projects remain.
+- Calculator history remains.
+- Custom buffer templates remain.
+- Saved custom formulas remain.
+- Protocol favorites, recent protocols, and saved protocols remain.
+- My profile/preferences remain.
 
 ## Current Limitation
 
-Full runtime acceptance still requires full Xcode. The current development machine only has Command Line Tools, so `xcodebuild` cannot run here yet.
+v1 has no backend, account system, cloud sync, shared workspace, or AI provider integration. Internal testing should treat all data as device-local app data. Removing the app or clearing simulator data will remove local data.

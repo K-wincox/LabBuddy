@@ -1,6 +1,6 @@
 # LabBuddy
 
-LabBuddy is a local-first iOS app prototype for wet-lab researchers. The first usable build focuses on a today-first bench workflow: scheduled runs, step completion, protocol scaling previews, and quick calculator examples.
+LabBuddy is a local-first iOS app prototype for wet-lab researchers. The current build focuses on a today-first bench workflow: calendar-like daily scheduling, protocol-based run creation, focused bench execution, step completion, local timers, calculators, inventory in the personal workspace, and shareable result cards.
 
 ## Open locally
 
@@ -62,19 +62,21 @@ Each zip includes `PACKAGE_MANIFEST.txt` with the package version, open command,
 
 ## Current prototype
 
-- Native SwiftUI app, iOS 17.0 target.
-- No sign-in, cloud sync, account system, AI provider, or external dependency.
-- Today tab with seeded cell experiment, plasmid prep, and Western blot/gel work.
+- Native SwiftUI app, iOS-only, local-first.
+- Bundle ID `com.kongweikang.LabBuddy`, version `0.1.0`, build `1`.
+- Xcode project currently targets iOS `18.6`.
+- No sign-in, cloud sync, account system, backend service, AI provider, or external dependency.
+- Four bottom tabs: Today, Protocol, Tools, and My.
+- Today supports Past / Today / Tomorrow views. Past shows archived experiment days; Today and Tomorrow are editable plans.
+- Daily runs are displayed as calendar-like duration events with collapsed empty time and visible start/end time rules.
+- Runs can be created from Today using a protocol template, a manual experiment, or a carryover placeholder.
 - Step completion state persists locally with `@AppStorage`.
 - App-local labeled timers can be started from experiment cards and persist between launches.
-- Bench Mode opens a focused, large-control execution view for one active experiment.
-- Protocol tab previews proportional recipe scaling and imports scaled runs into Today.
-- Imported runs can be removed from Today so repeated demos stay tidy.
-- Tools tab has interactive mass, dilution, and percentage calculators plus clipboard copy.
-- Inventory tab tracks local reagent/material quantities with low-stock warnings and quick adjustments.
-- Inventory includes a local demo reset action for repeated Xcode testing.
-- Bench completion can generate a first Data Card preview with run metadata and LabBuddy branding.
-- Data Cards include a local mentor-report summary draft with clipboard copy.
+- Bench Mode opens a focused, large-control execution view for one active experiment and can switch back to detail.
+- Protocol manages local method templates, variables, ingredients, steps, source notes, favorites, recents, and consistency checks.
+- Tools has interactive mass, dilution, percentage, custom formula, history, and buffer template workflows.
+- My contains profile/preferences plus personal inventory with low-stock warnings, quick adjustments, and transaction history.
+- Bench completion or sharing can generate a Data Card preview with image/metadata, experiment conditions, optional watermark, save, copy, and share actions.
 
 ## First walkthrough
 
@@ -82,14 +84,20 @@ Each zip includes `PACKAGE_MANIFEST.txt` with the package version, open command,
 2. Tap `实验台` on any run to enter the focused bench-side view.
 3. Mark steps complete with the large check controls.
 4. Start a timer from the bench view or experiment card.
-5. Open the Protocol tab, adjust the target volume, and tap `导入今日安排`.
-6. Return to Today to see the newly imported scaled run.
+5. In Today, add an experiment from an empty insertion point and choose a protocol template or manual experiment.
+6. Confirm the time and details, then return to the timeline to see the new run.
 7. Open Tools, calculate a mass/dilution/percentage recipe, and copy the result.
-8. Open Inventory and try quick deduct/restock on a low-stock item.
+8. Open My, enter Inventory, and try quick deduct/restock on a low-stock item.
 9. Finish a run in Bench Mode or tap the share button to preview the first Data Card.
-10. Copy the local report summary draft from the Data Card.
-11. Use Inventory's reset action if you want to replay the demo from a clean local state.
+10. Attach or preview a result image, then copy/share the Data Card conditions.
+11. Use My's local demo reset action if you want to replay the demo from a clean local state.
 
 ## Verification status
 
-The repository currently has Swift source type-checking and project-file validation through `./scripts/check-ios-local.sh`. Full `xcodebuild` verification requires full Xcode; this machine currently only has Command Line Tools.
+The repository currently has project-file validation and iOS Simulator build verification through `./scripts/check-ios-local.sh` / `make preflight`. Full Xcode is available in the current development environment.
+
+## Persistence model
+
+v1 is intentionally local-only. Current state is stored with `UserDefaults`, `@AppStorage`, and `Codable` JSON payloads for imported Today runs, Tomorrow runs, Past records, inventory, projects, timers, calculator history, custom buffer/formula data, protocol favorites/recents/saved protocols, preferences, and completed step IDs.
+
+There is no backend in v1. A backend should only be introduced when the product needs account login, multi-device sync, cloud backup, shared lab/team collaboration, cross-device protocol libraries, subscription entitlement validation, or server-side AI workflows. Until then, local persistence is the correct scope for internal testing.
