@@ -215,7 +215,7 @@ struct AddExperimentSheet: View {
             let steps: [LabStep] = [
                 LabStep(id: "review-\(ts)", title: "核对换算配方", detail: recipeSummary, durationMinutes: nil, isCarryOver: false)
             ] + (selectedProtocol.steps.isEmpty ? [LabStep(id: "exec-\(ts)", title: "执行 Protocol", detail: selectedProtocol.name, durationMinutes: dur, isCarryOver: false)] : selectedProtocol.steps.map { s in
-                LabStep(id: "\(s.id)-\(ts)", title: s.title, detail: s.detail, durationMinutes: s.durationMinutes ?? dur, isCarryOver: s.isCarryOver)
+                LabStep(id: "\(s.id)-\(ts)", title: s.title, detail: s.detail, durationMinutes: s.durationMinutes, isCarryOver: s.isCarryOver)
             }) + [LabStep(id: "record-\(ts)", title: "记录结果", detail: "完成后生成结果卡片", durationMinutes: nil, isCarryOver: false)]
 
             let finalName = experimentName.trimmingCharacters(in: .whitespaces).isEmpty ? selectedProtocol.name : experimentName

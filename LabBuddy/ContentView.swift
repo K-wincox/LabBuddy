@@ -120,7 +120,48 @@ struct ContentView: View {
         }
         if let data = UserDefaults.standard.data(forKey: "userProjects"),
            let projs = try? JSONDecoder().decode([Project].self, from: data), !projs.isEmpty { projects = projs }
+        normalizeImportedStepTimers()
         migrateLegacyProjects()
+    }
+
+    private func normalizeImportedStepTimers() {
+        let normalizedImported = importedRuns.map(Self.normalizedStepTimers)
+        let normalizedTomorrow = tomorrowRuns.map(Self.normalizedStepTimers)
+        if normalizedImported != importedRuns {
+            importedRuns = normalizedImported
+            saveImportedRuns(importedRuns)
+        }
+        if normalizedTomorrow != tomorrowRuns {
+            tomorrowRuns = normalizedTomorrow
+            saveTomorrowRuns(tomorrowRuns)
+        }
+    }
+
+    private static func normalizedStepTimers(_ run: LabRun) -> LabRun {
+        guard let protocolTemplate = SampleData.protocols.first(where: { $0.name == run.protocolName }) else {
+            return run
+        }
+        let templateDurations = Dictionary(uniqueKeysWithValues: protocolTemplate.steps.map { ($0.id, $0.durationMinutes) })
+        let normalizedSteps = run.steps.map { step in
+            var normalized = step
+            for (templateID, duration) in templateDurations where normalized.id.hasPrefix("\(templateID)-") {
+                normalized.durationMinutes = duration
+                break
+            }
+            return normalized
+        }
+        guard normalizedSteps != run.steps else { return run }
+        return LabRun(
+            id: run.id,
+            title: run.title,
+            area: run.area,
+            timeLabel: run.timeLabel,
+            status: run.status,
+            protocolName: run.protocolName,
+            scaledVolumeLabel: run.scaledVolumeLabel,
+            projectID: run.projectID,
+            steps: normalizedSteps
+        )
     }
 
     private func migrateLegacyProjects() {

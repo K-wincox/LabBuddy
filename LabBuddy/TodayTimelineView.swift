@@ -580,12 +580,13 @@ private struct RunDetailSheet: View {
                     // Info + Time in one row
                     HStack(alignment: .top, spacing: 16) {
                         // Info
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text("实验信息")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             TextField("实验名称", text: $editedTitle)
                                 .font(.body.weight(.semibold))
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             if !projects.isEmpty {
                                 Picker("项目", selection: $selectedProjectID) {
                                     Text("无项目").tag(nil as String?)
@@ -609,7 +610,7 @@ private struct RunDetailSheet: View {
                         .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
 
                         // Time
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text("时间")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
@@ -622,8 +623,9 @@ private struct RunDetailSheet: View {
                                 showingTimePicker = true
                             } label: {
                                 Text(run.timeLabel)
-                                    .font(.title2.monospacedDigit().weight(.bold))
+                                    .font(.body.monospacedDigit().weight(.semibold))
                                     .foregroundStyle(.teal)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .buttonStyle(.plain)
                             Spacer(minLength: 0)
