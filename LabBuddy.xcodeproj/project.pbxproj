@@ -11,6 +11,12 @@
 		6A1B01012C00100100F10001 /* LabBuddyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B00012C00100100F10001 /* LabBuddyApp.swift */; };
 		6A1B01022C00100100F10001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B00022C00100100F10001 /* ContentView.swift */; };
 		6A1B01062C00100100F10001 /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B00082C00100100F10001 /* TodayView.swift */; };
+		6A1B01072C00100100F10001 /* TodayScheduleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B00092C00100100F10001 /* TodayScheduleSheet.swift */; };
+		6A1B01082C00100100F10001 /* TodayRecordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B000A2C00100100F10001 /* TodayRecordsView.swift */; };
+		6A1B01092C00100100F10001 /* TodayTimerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B000B2C00100100F10001 /* TodayTimerViews.swift */; };
+		6A1B010A2C00100100F10001 /* TodayTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B000C2C00100100F10001 /* TodayTimelineView.swift */; };
+		6A1B010B2C00100100F10001 /* BenchModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B000D2C00100100F10001 /* BenchModeView.swift */; };
+		6A1B010C2C00100100F10001 /* TodayShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B000E2C00100100F10001 /* TodayShared.swift */; };
 		6A1B01032C00100100F10001 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B00032C00100100F10001 /* Models.swift */; };
 		6A1B01042C00100100F10001 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1B00042C00100100F10001 /* SampleData.swift */; };
 		6A1B01052C00100100F10001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6A1B00052C00100100F10001 /* Assets.xcassets */; };
@@ -25,6 +31,12 @@
 		6A1B00012C00100100F10001 /* LabBuddyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LabBuddyApp.swift; sourceTree = "<group>"; };
 		6A1B00022C00100100F10001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		6A1B00082C00100100F10001 /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		6A1B00092C00100100F10001 /* TodayScheduleSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayScheduleSheet.swift; sourceTree = "<group>"; };
+		6A1B000A2C00100100F10001 /* TodayRecordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayRecordsView.swift; sourceTree = "<group>"; };
+		6A1B000B2C00100100F10001 /* TodayTimerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayTimerViews.swift; sourceTree = "<group>"; };
+		6A1B000C2C00100100F10001 /* TodayTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayTimelineView.swift; sourceTree = "<group>"; };
+		6A1B000D2C00100100F10001 /* BenchModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchModeView.swift; sourceTree = "<group>"; };
+		6A1B000E2C00100100F10001 /* TodayShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayShared.swift; sourceTree = "<group>"; };
 		6A1B00032C00100100F10001 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		6A1B00042C00100100F10001 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
 		6A1B00052C00100100F10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -59,6 +71,12 @@
 				6A1B00012C00100100F10001 /* LabBuddyApp.swift */,
 				6A1B00022C00100100F10001 /* ContentView.swift */,
 				6A1B00082C00100100F10001 /* TodayView.swift */,
+				6A1B00092C00100100F10001 /* TodayScheduleSheet.swift */,
+				6A1B000A2C00100100F10001 /* TodayRecordsView.swift */,
+				6A1B000B2C00100100F10001 /* TodayTimerViews.swift */,
+				6A1B000C2C00100100F10001 /* TodayTimelineView.swift */,
+				6A1B000D2C00100100F10001 /* BenchModeView.swift */,
+				6A1B000E2C00100100F10001 /* TodayShared.swift */,
 				C0211A4C59EC43409D8A49F7 /* ProtocolLibraryView.swift */,
 				01057C50522F4E4CA0CA7A84 /* CalculatorToolkitView.swift */,
 				293A9279F0E94CB492BF0ED1 /* MyWorkspaceView.swift */,
@@ -151,6 +169,12 @@
 				6A1B01012C00100100F10001 /* LabBuddyApp.swift in Sources */,
 				6A1B01022C00100100F10001 /* ContentView.swift in Sources */,
 				6A1B01062C00100100F10001 /* TodayView.swift in Sources */,
+				6A1B01072C00100100F10001 /* TodayScheduleSheet.swift in Sources */,
+				6A1B01082C00100100F10001 /* TodayRecordsView.swift in Sources */,
+				6A1B01092C00100100F10001 /* TodayTimerViews.swift in Sources */,
+				6A1B010A2C00100100F10001 /* TodayTimelineView.swift in Sources */,
+				6A1B010B2C00100100F10001 /* BenchModeView.swift in Sources */,
+				6A1B010C2C00100100F10001 /* TodayShared.swift in Sources */,
 				0F7B0D7E109941AFB0F4FF6A /* ProtocolLibraryView.swift in Sources */,
 				BD6975F2C2AC416BB6B8AB14 /* CalculatorToolkitView.swift in Sources */,
 				8E689A33B58F4E7CA0A824A5 /* MyWorkspaceView.swift in Sources */,
