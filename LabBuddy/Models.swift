@@ -316,9 +316,11 @@ struct ProtocolSource: Hashable, Codable {
 }
 
 enum ProtocolSourceType: String, CaseIterable, Identifiable, Codable {
-    case literature = "文献"
-    case kitManual = "试剂盒手册"
+    case camera = "拍照识别"
+    case photoLibrary = "相册导入"
     case sop = "SOP"
+    case kitManual = "试剂盒手册"
+    case literature = "文献"
 
     var id: String { rawValue }
 }
@@ -425,4 +427,3 @@ enum ExpressionEvaluator {
         }
     }
 }
-

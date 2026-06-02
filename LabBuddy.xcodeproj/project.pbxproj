@@ -319,6 +319,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = LabBuddy;
+				INFOPLIST_KEY_NSCameraUsageDescription = "LabBuddy 需要拍摄纸质 Protocol、SOP 或试剂盒说明书以提取实验步骤。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "LabBuddy 需要从相册读取 Protocol 图片或截图以提取实验步骤。";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -349,6 +351,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = LabBuddy;
+				INFOPLIST_KEY_NSCameraUsageDescription = "LabBuddy 需要拍摄纸质 Protocol、SOP 或试剂盒说明书以提取实验步骤。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "LabBuddy 需要从相册读取 Protocol 图片或截图以提取实验步骤。";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

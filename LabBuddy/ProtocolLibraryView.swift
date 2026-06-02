@@ -1,4 +1,10 @@
 import SwiftUI
+import PhotosUI
+import PDFKit
+@preconcurrency import Vision
+#if os(iOS)
+import UIKit
+#endif
 
 struct ProtocolLibraryView: View {
     @State private var editableProtocols: [LabProtocol] = {
@@ -1302,70 +1308,614 @@ struct ProtocolExtractionSheet: View {
     let accept: (LabProtocol) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var sourceTitle = ""
+    @State private var extractedText = ""
     @State private var extractedName = ""
     @State private var extractedVolume = 50.0
+    @State private var selectedArea: WorkflowArea = .cell
+    @State private var isProcessing = false
+    @State private var statusMessage = "选择来源后会生成可编辑草稿。"
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var showPDFImporter = false
+    @State private var errorMessage: String?
+
+    private var canAccept: Bool {
+        !extractedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     private var previewProtocol: LabProtocol {
-        LabProtocol(
-            id: "extracted-\(sourceType.rawValue)-\(Int(Date().timeIntervalSince1970))",
-            name: extractedName.isEmpty ? "\(sourceType.rawValue) 提取 Protocol" : extractedName,
-            area: sourceType == .kitManual ? .cloning : .cell,
+        ProtocolDraftParser.protocolFromText(
+            extractedText,
+            sourceType: sourceType,
+            sourceTitle: sourceTitle,
+            fallbackName: extractedName,
             baseVolume: extractedVolume,
-            volumeUnit: sourceType == .kitManual ? "ul" : "ml",
-            expectedDuration: "20 min",
-            ingredients: [
-                ProtocolIngredient(name: "提取成分 A", standardAmount: extractedVolume * 0.8, unit: sourceType == .kitManual ? "ul" : "ml"),
-                ProtocolIngredient(name: "提取成分 B", standardAmount: extractedVolume * 0.2, unit: sourceType == .kitManual ? "ul" : "ml")
-            ],
-            steps: [
-                LabStep(id: UUID().uuidString, title: "核对来源参数", detail: "检查温度、时间、转速和体积", durationMinutes: nil, isCarryOver: false),
-                LabStep(id: UUID().uuidString, title: "执行提取方法", detail: "按来源方法完成关键步骤", durationMinutes: 20, isCarryOver: false)
-            ],
-            variables: [
-                ProtocolVariable(symbol: "V_total", name: "总体积", baseValue: extractedVolume, unit: sourceType == .kitManual ? "ul" : "ml", isScalable: true, minValue: 10, maxValue: 500)
-            ],
-            source: ProtocolSource(type: sourceType, title: sourceTitle.isEmpty ? "待补充来源标题" : sourceTitle, confidence: 0.72)
+            area: selectedArea
         )
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("来源信息") {
-                    Text(sourceType.rawValue).font(.headline)
-                    TextField("文献题名 / 手册名称 / SOP 编号", text: $sourceTitle)
-                    TextField("提取后的 Protocol 名称", text: $extractedName)
-                    HStack {
-                        Text("基准体积")
-                        Spacer()
-                        TextField("0", value: $extractedVolume, format: .number)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 92)
-                    }
+            ScrollView {
+                VStack(spacing: 14) {
+                    sourceHeader
+                    sourceActions
+                    sourceMetadata
+                    extractionPreview
+                    draftPreview
+                    acceptButton
                 }
-                Section("说明") {
-                    Label("v1 使用人工核对流程：输入来源标题后，接受草稿并手动补充成分和步骤。自动 AI 提取为后续版本功能。", systemImage: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Section {
-                    Button {
-                        accept(previewProtocol)
-                        dismiss()
-                    } label: {
-                        Label("接受草稿并继续编辑", systemImage: "checkmark.circle.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
+                .padding(18)
             }
+            .background(Color.labBackground.ignoresSafeArea())
             .navigationTitle("提取 Protocol")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
             }
+            .fileImporter(isPresented: $showPDFImporter, allowedContentTypes: [.pdf]) { result in
+                handlePDFImport(result)
+            }
+            .sheet(isPresented: $showCamera) {
+                CameraCaptureView { image in
+                    Task { await extractText(from: image) }
+                }
+            }
+            .onChange(of: selectedPhotoItem) { _, item in
+                guard let item else { return }
+                Task { await handlePhotoItem(item) }
+            }
+            .alert("提取失败", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                Button("知道了", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+
+    private var sourceHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(sourceType.rawValue, systemImage: sourceIcon)
+                .font(.headline)
+            Text(sourceDescription)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var sourceActions: some View {
+        VStack(spacing: 10) {
+            switch sourceType {
+            case .camera:
+                Button {
+                    showCamera = true
+                } label: {
+                    Label("拍摄并识别", systemImage: "camera.viewfinder")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.teal)
+                .controlSize(.large)
+
+            case .photoLibrary:
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    Label("从相册选择图片", systemImage: "photo.on.rectangle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.teal)
+                .controlSize(.large)
+
+            case .kitManual, .sop, .literature:
+                Button {
+                    showPDFImporter = true
+                } label: {
+                    Label(sourceType == .literature ? "选择文献 PDF" : "选择 PDF 文件", systemImage: "doc.richtext")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.teal)
+                .controlSize(.large)
+            }
+
+            if isProcessing {
+                ProgressView(statusMessage)
+                    .font(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(14)
+        .background(.white, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var sourceMetadata: some View {
+        VStack(spacing: 12) {
+            TextField("来源标题 / 文件名 / DOI / SOP 编号", text: $sourceTitle)
+                .textFieldStyle(.roundedBorder)
+            TextField("Protocol 名称，可留空自动推断", text: $extractedName)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                Picker("实验类型", selection: $selectedArea) {
+                    ForEach(WorkflowArea.builtIn) { area in
+                        Text(area.rawValue).tag(area)
+                    }
+                }
+                .pickerStyle(.menu)
+                Spacer()
+                TextField("基准体积", value: $extractedVolume, format: .number)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 96)
+            }
+        }
+        .padding(14)
+        .background(.white, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var extractionPreview: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("提取原文")
+                    .font(.headline)
+                Spacer()
+                Button("清空") {
+                    extractedText = ""
+                    statusMessage = "已清空，重新选择来源。"
+                }
+                .font(.caption)
+                .disabled(extractedText.isEmpty)
+            }
+            TextEditor(text: $extractedText)
+                .font(.caption)
+                .frame(minHeight: 140)
+                .padding(8)
+                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+            Text("可直接修改原文。下方草稿会根据这里的文本实时生成，保存前仍会进入正式编辑页核对。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .background(.white, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var draftPreview: some View {
+        let draft = previewProtocol
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("草稿预览")
+                .font(.headline)
+            HStack {
+                Text(draft.name)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(draft.area.rawValue)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.teal)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.teal.opacity(0.12), in: Capsule())
+            }
+            HStack {
+                Label("\(draft.ingredients.count) 个试剂", systemImage: "drop")
+                Label("\(draft.steps.count) 个步骤", systemImage: "list.number")
+                Label(draft.expectedDuration, systemImage: "clock")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(draft.ingredients.prefix(4)) { ingredient in
+                    Text("\(ingredient.name) · \(ingredient.scaled(by: 1))")
+                        .font(.caption)
+                }
+                if draft.ingredients.count > 4 {
+                    Text("还有 \(draft.ingredients.count - 4) 个试剂")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if !ProtocolDraftParser.warnings(for: extractedText).isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(ProtocolDraftParser.warnings(for: extractedText), id: \.self) { warning in
+                        Label(warning, systemImage: "exclamationmark.triangle")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.orange)
+            }
+        }
+        .padding(14)
+        .background(.white, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var acceptButton: some View {
+        Button {
+            accept(previewProtocol)
+            dismiss()
+        } label: {
+            Label("生成草稿并继续编辑", systemImage: "checkmark.circle.fill")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.teal)
+        .controlSize(.large)
+        .disabled(!canAccept || isProcessing)
+    }
+
+    private var sourceIcon: String {
+        switch sourceType {
+        case .camera: "camera.viewfinder"
+        case .photoLibrary: "photo.on.rectangle"
+        case .literature: "doc.text.magnifyingglass"
+        case .kitManual: "shippingbox"
+        case .sop: "doc.text"
+        }
+    }
+
+    private var sourceDescription: String {
+        switch sourceType {
+        case .camera:
+            "现场拍摄纸质 SOP、试剂盒说明书或实验记录，并用本地 OCR 识别。"
+        case .photoLibrary:
+            "从已有图片、截图或拍好的说明书照片中识别 Protocol。"
+        case .kitManual:
+            "从 SOP 或试剂盒 PDF 提取文字；扫描版 PDF 暂时请先转成图片再用 OCR。"
+        case .sop:
+            "从实验室标准操作规程 PDF 中提取步骤、时间、温度、转速和试剂。"
+        case .literature:
+            "从文献 PDF 中优先提取 Methods 相关段落，并整理成可编辑草稿。"
+        }
+    }
+
+    private func handlePhotoItem(_ item: PhotosPickerItem) async {
+        isProcessing = true
+        statusMessage = "正在读取相册图片..."
+        defer { isProcessing = false }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                errorMessage = "无法读取图片。"
+                return
+            }
+            await extractText(from: image)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func extractText(from image: UIImage) async {
+        isProcessing = true
+        statusMessage = "正在进行本地 OCR..."
+        defer { isProcessing = false }
+        do {
+            let text = try await ProtocolTextExtractionService.recognizeText(in: image)
+            extractedText = text
+            statusMessage = text.isEmpty ? "没有识别到文字，请换一张更清晰的图片。" : "OCR 完成，请核对原文和草稿。"
+        } catch {
+            errorMessage = error.localizedDescription
+            statusMessage = "OCR 失败。"
+        }
+    }
+
+    private func handlePDFImport(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            isProcessing = true
+            statusMessage = "正在读取 PDF..."
+            Task {
+                do {
+                    let text = try ProtocolTextExtractionService.extractText(fromPDF: url, preferMethods: sourceType == .literature)
+                    await MainActor.run {
+                        sourceTitle = sourceTitle.isEmpty ? url.deletingPathExtension().lastPathComponent : sourceTitle
+                        extractedText = text
+                        statusMessage = text.isEmpty ? "PDF 没有可提取文本。扫描版请先使用拍照或相册 OCR。" : "PDF 文本提取完成，请核对草稿。"
+                        isProcessing = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        errorMessage = error.localizedDescription
+                        statusMessage = "PDF 提取失败。"
+                        isProcessing = false
+                    }
+                }
+            }
+        case .failure(let error):
+            errorMessage = error.localizedDescription
         }
     }
 }
+
+enum ProtocolTextExtractionService {
+    static func recognizeText(in image: UIImage) async throws -> String {
+        guard let cgImage = image.cgImage else { return "" }
+        return try await withCheckedThrowingContinuation { continuation in
+            let request = VNRecognizeTextRequest { request, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let observations = request.results as? [VNRecognizedTextObservation] ?? []
+                let lines = observations.compactMap { $0.topCandidates(1).first?.string }
+                continuation.resume(returning: lines.joined(separator: "\n"))
+            }
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+            request.recognitionLanguages = ["zh-Hans", "en-US"]
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try handler.perform([request])
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    static func extractText(fromPDF url: URL, preferMethods: Bool) throws -> String {
+        let didStart = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStart { url.stopAccessingSecurityScopedResource() }
+        }
+        guard let document = PDFDocument(url: url) else { return "" }
+        var pages: [String] = []
+        for index in 0..<document.pageCount {
+            guard let page = document.page(at: index), let text = page.string else { continue }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { pages.append(trimmed) }
+        }
+        let fullText = pages.joined(separator: "\n\n")
+        guard preferMethods else { return fullText }
+        return methodsSection(from: fullText)
+    }
+
+    private static func methodsSection(from text: String) -> String {
+        let lower = text.lowercased()
+        let starts = ["materials and methods", "methods", "experimental procedures", "method"]
+        let ends = ["results", "discussion", "references", "acknowledg"]
+        guard let start = starts.compactMap({ lower.range(of: $0)?.lowerBound }).min() else {
+            return text
+        }
+        let afterStart = lower[start...]
+        let end = ends.compactMap { marker -> String.Index? in
+            guard let range = afterStart.range(of: marker) else { return nil }
+            return range.lowerBound > start ? range.lowerBound : nil
+        }.min() ?? text.endIndex
+        return String(text[start..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+enum ProtocolDraftParser {
+    static func protocolFromText(_ text: String, sourceType: ProtocolSourceType, sourceTitle: String, fallbackName: String, baseVolume: Double, area: WorkflowArea) -> LabProtocol {
+        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = fallbackName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? inferredName(from: cleanText, sourceType: sourceType)
+            : fallbackName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let duration = totalDurationLabel(from: cleanText)
+        let ingredients = inferredIngredients(from: cleanText, fallbackVolume: baseVolume)
+        let steps = inferredSteps(from: cleanText)
+        let unit = ingredients.first?.unit ?? (area == .cloning ? "ul" : "ml")
+        return LabProtocol(
+            id: "extracted-\(sourceType.id)-\(Int(Date().timeIntervalSince1970))",
+            name: name,
+            area: area,
+            baseVolume: max(baseVolume, 1),
+            volumeUnit: unit,
+            expectedDuration: duration,
+            ingredients: ingredients.isEmpty ? [ProtocolIngredient(name: "待核对试剂", standardAmount: max(baseVolume, 1), unit: unit)] : ingredients,
+            steps: steps,
+            variables: [
+                ProtocolVariable(symbol: "V_total", name: "总体积", baseValue: max(baseVolume, 1), unit: unit, isScalable: true, minValue: 1, maxValue: 10000)
+            ],
+            source: ProtocolSource(type: sourceType, title: sourceTitle.isEmpty ? "待补充来源标题" : sourceTitle, confidence: confidence(for: cleanText))
+        )
+    }
+
+    static func warnings(for text: String) -> [String] {
+        let lower = text.lowercased()
+        var warnings: [String] = []
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).count < 30 {
+            warnings.append("原文较短，建议核对是否漏选段落。")
+        }
+        if !lower.contains("ml") && !lower.contains("µl") && !lower.contains("ul") && !lower.contains("mg") && !lower.contains("g") {
+            warnings.append("没有识别到明确用量单位。")
+        }
+        if !lower.contains("min") && !lower.contains("hour") && !lower.contains("h") && !text.contains("分钟") && !text.contains("小时") {
+            warnings.append("没有识别到明确时间参数。")
+        }
+        return warnings
+    }
+
+    private static func inferredName(from text: String, sourceType: ProtocolSourceType) -> String {
+        let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        let cleaned = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.count >= 4 && cleaned.count <= 48 { return cleaned }
+        return "\(sourceType.rawValue) Protocol 草稿"
+    }
+
+    private static func inferredIngredients(from text: String, fallbackVolume: Double) -> [ProtocolIngredient] {
+        let patterns = [
+            #"([A-Za-z0-9α-ωΑ-Ωµμ\-\+\.\s/%]+?)\s*(\d+(?:\.\d+)?)\s*(mL|ml|µL|μL|uL|ul|L|g|mg|µg|ug|ng)"#,
+            #"([\p{Han}A-Za-z0-9α-ωΑ-Ωµμ\-\+\.\s/%]+?)(\d+(?:\.\d+)?)\s*(mL|ml|µL|μL|uL|ul|L|g|mg|µg|ug|ng)"#
+        ]
+        var found: [ProtocolIngredient] = []
+        for pattern in patterns {
+            found.append(contentsOf: matches(pattern: pattern, in: text).compactMap { groups in
+                guard groups.count >= 3, let amount = Double(groups[1]) else { return nil }
+                let name = cleanupName(groups[0])
+                guard !name.isEmpty, name.count <= 50 else { return nil }
+                return ProtocolIngredient(name: name, standardAmount: amount, unit: normalizedUnit(groups[2]))
+            })
+        }
+        var unique: [ProtocolIngredient] = []
+        for item in found where !unique.contains(where: { $0.name == item.name && $0.unit == item.unit }) {
+            unique.append(item)
+        }
+        if unique.isEmpty && fallbackVolume > 0 {
+            return [ProtocolIngredient(name: "待核对总体积", standardAmount: fallbackVolume, unit: "ml")]
+        }
+        return Array(unique.prefix(12))
+    }
+
+    private static func inferredSteps(from text: String) -> [LabStep] {
+        let rawLines = text
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let candidateLines = rawLines.filter { line in
+            line.count > 8 && (
+                line.range(of: #"^\s*(\d+[\.\)]|Step\s+\d+|步骤\s*\d+)"#, options: .regularExpression) != nil
+                || containsActionVerb(line)
+                || containsCondition(line)
+            )
+        }
+        let lines = candidateLines.isEmpty ? Array(rawLines.prefix(6)) : candidateLines
+        let steps = lines.prefix(14).enumerated().map { index, line in
+            let title = inferredStepTitle(from: line, index: index)
+            return LabStep(
+                id: UUID().uuidString,
+                title: title,
+                detail: line,
+                durationMinutes: inferredDuration(from: line),
+                isCarryOver: isCarryOver(line)
+            )
+        }
+        return steps.isEmpty ? [
+            LabStep(id: UUID().uuidString, title: "核对提取原文", detail: "检查试剂、用量、温度、时间和转速后再使用。", durationMinutes: nil, isCarryOver: false)
+        ] : steps
+    }
+
+    private static func totalDurationLabel(from text: String) -> String {
+        let minutes = inferredSteps(from: text).compactMap(\.durationMinutes).reduce(0, +)
+        guard minutes > 0 else { return "待核对" }
+        return minutes >= 60 ? "\(minutes / 60) h \(minutes % 60) min" : "\(minutes) min"
+    }
+
+    private static func inferredDuration(from line: String) -> Int? {
+        let patterns = [
+            #"(\d+(?:\.\d+)?)\s*(?:min|mins|minute|minutes|分钟)"#,
+            #"(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours|小时)"#
+        ]
+        for (idx, pattern) in patterns.enumerated() {
+            if let value = firstNumber(pattern: pattern, in: line) {
+                return idx == 0 ? Int(value.rounded()) : Int((value * 60).rounded())
+            }
+        }
+        return nil
+    }
+
+    private static func confidence(for text: String) -> Double {
+        let w = warnings(for: text).count
+        if text.isEmpty { return 0.2 }
+        return max(0.45, 0.82 - Double(w) * 0.12)
+    }
+
+    private static func isCarryOver(_ line: String) -> Bool {
+        let lower = line.lowercased()
+        return lower.contains("overnight") || line.contains("过夜")
+    }
+
+    private static func containsActionVerb(_ line: String) -> Bool {
+        let tokens = ["add", "mix", "incubate", "centrifuge", "wash", "transfer", "加入", "混匀", "孵育", "离心", "洗涤", "转移", "配置", "观察"]
+        let lower = line.lowercased()
+        return tokens.contains { lower.contains($0.lowercased()) }
+    }
+
+    private static func containsCondition(_ line: String) -> Bool {
+        let lower = line.lowercased()
+        return lower.contains("rpm") || lower.contains("°c") || lower.contains("℃") || lower.contains("min") || lower.contains("ml") || lower.contains("ul") || lower.contains("µl")
+    }
+
+    private static func inferredStepTitle(from line: String, index: Int) -> String {
+        var title = line.replacingOccurrences(of: #"^\s*(\d+[\.\)]|Step\s+\d+|步骤\s*\d+)\s*[:：-]?\s*"#, with: "", options: .regularExpression)
+        if let separator = title.firstIndex(where: { "。.;；".contains($0) }) {
+            title = String(title[..<separator])
+        }
+        title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.count > 18 { title = String(title.prefix(18)) + "..." }
+        return title.isEmpty ? "步骤 \(index + 1)" : title
+    }
+
+    private static func matches(pattern: String, in text: String) -> [[String]] {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [] }
+        let nsText = text as NSString
+        return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).map { match in
+            (1..<match.numberOfRanges).compactMap { idx in
+                let range = match.range(at: idx)
+                guard range.location != NSNotFound else { return nil }
+                return nsText.substring(with: range)
+            }
+        }
+    }
+
+    private static func firstNumber(pattern: String, in text: String) -> Double? {
+        matches(pattern: pattern, in: text).first?.first.flatMap(Double.init)
+    }
+
+    private static func cleanupName(_ name: String) -> String {
+        name
+            .replacingOccurrences(of: #"^[\s,，。;；:\-+/\d\.]+"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func normalizedUnit(_ unit: String) -> String {
+        switch unit.lowercased() {
+        case "μl", "µl", "ul": "ul"
+        case "ml": "ml"
+        default: unit
+        }
+    }
+}
+
+#if os(iOS)
+struct CameraCaptureView: UIViewControllerRepresentable {
+    let onCapture: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(.camera) ? .camera : .photoLibrary
+        picker.allowsEditing = true
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onCapture: onCapture, dismiss: dismiss)
+    }
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let onCapture: (UIImage) -> Void
+        let dismiss: DismissAction
+
+        init(onCapture: @escaping (UIImage) -> Void, dismiss: DismissAction) {
+            self.onCapture = onCapture
+            self.dismiss = dismiss
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            let image = (info[.editedImage] ?? info[.originalImage]) as? UIImage
+            if let image { onCapture(image) }
+            dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            dismiss()
+        }
+    }
+}
+#endif
 
 // Consistency check helper (shared)
 func protocolConsistencyIssues(_ labProtocol: LabProtocol) -> [String] {
