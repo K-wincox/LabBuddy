@@ -159,6 +159,7 @@ struct TodayView: View {
                                         importedRuns[index] = updatedRun
                                     }
                                 },
+                                toggleStep: toggleStepCompletion,
                                 pauseTimer: pauseTimer,
                                 resumeTimer: resumeTimer,
                                 stopTimer: stopTimer
@@ -225,6 +226,7 @@ struct TodayView: View {
                                         tomorrowRuns[index] = updatedRun
                                     }
                                 },
+                                toggleStep: toggleStepCompletion,
                                 pauseTimer: { _ in },
                                 resumeTimer: { _ in },
                                 stopTimer: { _ in }

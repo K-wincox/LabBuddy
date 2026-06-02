@@ -17,6 +17,7 @@ struct DayTimelineView: View {
     let openBenchMode: (LabRun) -> Void
     let removeRun: (LabRun) -> Void
     let onUpdateRun: (LabRun) -> Void
+    let toggleStep: (String) -> Void
     let pauseTimer: (ActiveLabTimer) -> Void
     let resumeTimer: (ActiveLabTimer) -> Void
     let stopTimer: (ActiveLabTimer) -> Void
@@ -36,10 +37,10 @@ struct DayTimelineView: View {
     private var hourSegments: [(startHour: Int, endHour: Int, hasRuns: Bool)] {
         var segments: [(Int, Int, Bool)] = []
         var currentStart = 0
-        var currentHasRuns = !runs.filter { hourFromLabel($0.timeLabel) == 0 }.isEmpty
+        var currentHasRuns = hasRunCovering(hour: 0)
 
         for hour in 1...23 {
-            let hasRuns = !runs.filter { hourFromLabel($0.timeLabel) == hour }.isEmpty
+            let hasRuns = hasRunCovering(hour: hour)
             if hasRuns != currentHasRuns {
                 segments.append((currentStart, hour - 1, currentHasRuns))
                 currentStart = hour
@@ -108,6 +109,7 @@ struct DayTimelineView: View {
                                         onRemove: { run in
                                             if canRemove(run) { removeRun(run) }
                                         },
+                                        onToggleStep: toggleStep,
                                         onPauseTimer: pauseTimer,
                                         onResumeTimer: resumeTimer,
                                         onStopTimer: stopTimer
@@ -232,6 +234,15 @@ struct DayTimelineView: View {
         let rounded = (m / 15) * 15
         return String(format: "%02d:%02d", h, rounded)
     }
+
+    private func hasRunCovering(hour: Int) -> Bool {
+        let hourStart = hour * 60
+        let hourEnd = min((hour + 1) * 60, 24 * 60)
+        return runs.contains { run in
+            run.startMinuteOfDay < hourEnd && run.endMinuteOfDay > hourStart
+        }
+    }
+
 }
 
 private struct HourRow: View {
@@ -337,7 +348,7 @@ private struct RunChip: View {
                     .frame(height: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(run.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                    Text("\(run.timeLabel) · \(doneCount)/\(run.steps.count)步").font(.caption).foregroundStyle(.secondary)
+                    Text("\(run.protocolName) · \(doneCount)/\(run.steps.count)步").font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 3) {
@@ -375,6 +386,7 @@ private struct ExpandedRunCard: View {
     let onCard: () -> Void
     let onBench: () -> Void
     let onRemove: (() -> Void)?
+    let onToggleStep: (String) -> Void
     let onPause: (() -> Void)?
     let onResume: (() -> Void)?
     let onStop: (() -> Void)?
@@ -409,8 +421,6 @@ private struct ExpandedRunCard: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(run.title).font(.headline).lineLimit(1)
                         HStack(spacing: 4) {
-                            Text(run.timeLabel).font(.caption.monospacedDigit().weight(.semibold)).foregroundStyle(chipColor)
-                            Text("·").foregroundStyle(.secondary)
                             Text(run.protocolName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
                     }
@@ -437,10 +447,15 @@ private struct ExpandedRunCard: View {
             VStack(spacing: 6) {
                 ForEach(run.steps) { step in
                     HStack(spacing: 8) {
-                        Image(systemName: completedStepIDs.contains(step.id) ? "checkmark.circle.fill" : "circle")
-                            .font(.body)
-                            .foregroundStyle(completedStepIDs.contains(step.id) ? chipColor : .secondary.opacity(0.5))
-                            .frame(width: 24)
+                        Button {
+                            onToggleStep(step.id)
+                        } label: {
+                            Image(systemName: completedStepIDs.contains(step.id) ? "checkmark.circle.fill" : "circle")
+                                .font(.body)
+                                .foregroundStyle(completedStepIDs.contains(step.id) ? chipColor : .secondary.opacity(0.5))
+                                .frame(width: 24)
+                        }
+                        .buttonStyle(.plain)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(step.title)
                                 .font(.body.weight(.medium))
@@ -1110,6 +1125,7 @@ private struct DynamicHourBlock: View {
     let onCard: (LabRun) -> Void
     let onBench: (LabRun) -> Void
     let onRemove: (LabRun) -> Void
+    let onToggleStep: (String) -> Void
     let onPauseTimer: ((ActiveLabTimer) -> Void)?
     let onResumeTimer: ((ActiveLabTimer) -> Void)?
     let onStopTimer: ((ActiveLabTimer) -> Void)?
@@ -1139,17 +1155,13 @@ private struct DynamicHourBlock: View {
                 Color.clear
                     .frame(height: zoom == .overview ? 24 : 32)
             } else {
-                // Has experiments - dynamic layout
-                VStack(spacing: zoom == .overview ? 8 : 12) {
+                ZStack(alignment: .topLeading) {
                     ForEach(runs.sorted(by: { minuteFrom($0.timeLabel) < minuteFrom($1.timeLabel) })) { run in
-                        HStack(spacing: 0) {
-                            // Time indicator for this run
-                            Text(run.timeLabel)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.secondary.opacity(0.6))
-                                .frame(width: 48, alignment: .trailing)
+                        let layout = eventLayout(for: run)
+                        HStack(alignment: .top, spacing: 0) {
+                            TimeRangeMarker(run: run, height: layout.height)
+                                .frame(width: 54)
 
-                            // Run card
                             if zoom == .overview {
                                 RunChip(
                                     run: run,
@@ -1161,6 +1173,7 @@ private struct DynamicHourBlock: View {
                                     onCard: { onCard(run) },
                                     onRemove: { onRemove(run) }
                                 )
+                                .frame(minHeight: layout.height, alignment: .top)
                                 .padding(.leading, 8)
                             } else {
                                 let timerForRun = activeTimers.first { $0.runID == run.id }
@@ -1174,15 +1187,19 @@ private struct DynamicHourBlock: View {
                                     onCard: { onCard(run) },
                                     onBench: { onBench(run) },
                                     onRemove: { onRemove(run) },
+                                    onToggleStep: onToggleStep,
                                     onPause: { if let t = timerForRun { onPauseTimer?(t) } },
                                     onResume: { if let t = timerForRun { onResumeTimer?(t) } },
                                     onStop: { if let t = timerForRun { onStopTimer?(t) } }
                                 )
+                                .frame(minHeight: layout.height, alignment: .top)
                                 .padding(.leading, 8)
                             }
                         }
+                        .offset(y: layout.y)
                     }
                 }
+                .frame(height: eventAreaHeight)
                 .padding(.top, 8)
                 .padding(.bottom, 8)
                 .padding(.trailing, 8)
@@ -1199,6 +1216,45 @@ private struct DynamicHourBlock: View {
         let parts = label.split(separator: ":")
         guard parts.count == 2, let m = Int(parts[1]) else { return 0 }
         return m
+    }
+
+    private var eventAreaHeight: CGFloat {
+        let fallback: CGFloat = zoom == .overview ? 72 : 160
+        return max(fallback, runs.map { eventLayout(for: $0).bottom }.max() ?? fallback)
+    }
+
+    private func eventLayout(for run: LabRun) -> (y: CGFloat, height: CGFloat, bottom: CGFloat) {
+        let minuteHeight = max(1.2, (zoom == .overview ? 1.2 : 2.8))
+        let startOffset = CGFloat(run.startMinuteOfDay - hour * 60)
+        let y = max(0, startOffset) * minuteHeight
+        let durationHeight = CGFloat(run.scheduledDurationMinutes) * minuteHeight
+        let contentMinimum: CGFloat = zoom == .overview ? 64 : CGFloat(max(180, run.steps.count * 42 + 150))
+        let height = max(durationHeight, contentMinimum)
+        return (y, height, y + height)
+    }
+}
+
+private struct TimeRangeMarker: View {
+    let run: LabRun
+    let height: CGFloat
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            Text(run.timeLabel)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 4) {
+                Text(timeLabelFromMinutes(run.endMinuteOfDay))
+
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.22))
+                    .frame(width: 22, height: 1)
+            }
+        }
+        .font(.system(size: 9, design: .monospaced).weight(.medium))
+        .foregroundStyle(.secondary.opacity(0.55))
+        .frame(maxWidth: .infinity, minHeight: height, alignment: .trailing)
     }
 }
 

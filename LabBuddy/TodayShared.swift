@@ -25,6 +25,38 @@ func highlightedLabParameters(_ text: String) -> AttributedString {
     return attributed
 }
 
+func minutesFromTimeLabel(_ label: String) -> Int? {
+    let parts = label.split(separator: ":")
+    guard parts.count == 2,
+          let hour = Int(parts[0]),
+          let minute = Int(parts[1]) else { return nil }
+    return hour * 60 + minute
+}
+
+func timeLabelFromMinutes(_ minutes: Int) -> String {
+    let clamped = min(max(minutes, 0), 24 * 60)
+    if clamped == 24 * 60 { return "24:00" }
+    return String(format: "%02d:%02d", clamped / 60, clamped % 60)
+}
+
+extension LabRun {
+    var startMinuteOfDay: Int {
+        minutesFromTimeLabel(timeLabel) ?? 9 * 60
+    }
+
+    var scheduledDurationMinutes: Int {
+        let timedTotal = steps.compactMap(\.durationMinutes).reduce(0, +)
+        if timedTotal > 0 {
+            return max(timedTotal, 15)
+        }
+        return steps.contains(where: \.isCarryOver) ? 120 : 30
+    }
+
+    var endMinuteOfDay: Int {
+        min(startMinuteOfDay + scheduledDurationMinutes, 24 * 60)
+    }
+}
+
 extension Array where Element == LabRun {
     func sortedByTimeLabel() -> [LabRun] {
         sorted { lhs, rhs in minutes(lhs.timeLabel) < minutes(rhs.timeLabel) }
