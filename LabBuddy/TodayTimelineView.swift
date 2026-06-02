@@ -446,9 +446,8 @@ private struct ExpandedRunCard: View {
                             Text(step.title)
                                 .font(.body.weight(.medium))
                                 .strikethrough(completedStepIDs.contains(step.id))
-                            Text(step.detail)
+                            Text(highlightedLabParameters(step.detail))
                                 .font(.subheadline)
-                                .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }
                         Spacer()
@@ -651,7 +650,7 @@ private struct RunDetailSheet: View {
                                         .font(.headline)
                                         .strikethrough(completedStepIDs.contains(step.id))
                                     if !step.detail.isEmpty {
-                                        Text(highlightedStepDetail(step.detail))
+                                        Text(highlightedLabParameters(step.detail))
                                             .font(.subheadline)
                                     }
                                 }
@@ -862,30 +861,6 @@ private struct RunDetailSheet: View {
         }
     }
 
-    private func highlightedStepDetail(_ text: String) -> AttributedString {
-        var attributed = AttributedString(text)
-        attributed.foregroundColor = .secondary
-
-        // Pattern: number + optional space + unit
-        // Matches: "1 次", "37 C", "4 ml", "5%", "10 min", etc.
-        let pattern = #"(\d+\.?\d*)\s*([A-Za-z°µμ%次]+)"#
-
-        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
-            let nsString = text as NSString
-            let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsString.length))
-
-            for match in matches.reversed() {
-                if let range = Range(match.range, in: text) {
-                    if let attrRange = Range(range, in: attributed) {
-                        attributed[attrRange].foregroundColor = .teal
-                        attributed[attrRange].font = .subheadline.weight(.semibold).monospacedDigit()
-                    }
-                }
-            }
-        }
-
-        return attributed
-    }
 }
 
 // MARK: - Custom Timer Sheet
@@ -1080,7 +1055,7 @@ private struct StepRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(step.title).font(.subheadline.weight(.semibold)).strikethrough(isDone)
-                Text(step.detail).font(.caption).foregroundStyle(.secondary)
+                Text(highlightedLabParameters(step.detail)).font(.caption)
             }
             Spacer()
             if let dur = step.durationMinutes {
