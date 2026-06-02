@@ -126,7 +126,7 @@ struct DayTimelineView: View {
                             }
                         }
                     }
-                    .padding(.bottom, 20)  // Reduced padding
+                    .padding(.bottom, 96)
                 }
                 .onAppear {
                     // Auto-scroll to first experiment or current hour
@@ -1136,18 +1136,13 @@ private struct DynamicHourBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Hour label
-            HStack(spacing: 0) {
-                Text(String(format: "%02d:00", hour))
-                    .font(.system(size: 11, weight: isCurrentHour ? .bold : .regular, design: .monospaced))
-                    .foregroundStyle(isCurrentHour ? Color.teal : Color.secondary.opacity(0.7))
-                    .frame(width: 48, alignment: .trailing)
-
-                Rectangle()
-                    .fill(isCurrentHour ? Color.teal.opacity(0.35) : Color.secondary.opacity(0.12))
-                    .frame(height: 1)
-                    .padding(.leading, 8)
-            }
+            TimelineTimeRule(
+                label: String(format: "%02d:00", hour),
+                tint: isCurrentHour ? Color.teal : Color.secondary,
+                prominence: isCurrentHour ? 0.35 : 0.12,
+                labelOpacity: isCurrentHour ? 1 : 0.7,
+                labelWeight: isCurrentHour ? .bold : .regular
+            )
 
             // Experiment content area
             if runs.isEmpty {
@@ -1158,44 +1153,24 @@ private struct DynamicHourBlock: View {
                 ZStack(alignment: .topLeading) {
                     ForEach(runs.sorted(by: { minuteFrom($0.timeLabel) < minuteFrom($1.timeLabel) })) { run in
                         let layout = eventLayout(for: run)
-                        HStack(alignment: .top, spacing: 0) {
-                            TimeRangeMarker(run: run, height: layout.height)
-                                .frame(width: 54)
-
-                            if zoom == .overview {
-                                RunChip(
-                                    run: run,
-                                    completedStepIDs: completedStepIDs,
-                                    activeTimer: activeTimers.first { $0.runID == run.id },
-                                    projects: projects,
-                                    onTap: { onTapRun(run) },
-                                    onStart: { onStart(run, nil, nil) },
-                                    onCard: { onCard(run) },
-                                    onRemove: { onRemove(run) }
-                                )
-                                .frame(minHeight: layout.height, alignment: .top)
-                                .padding(.leading, 8)
-                            } else {
-                                let timerForRun = activeTimers.first { $0.runID == run.id }
-                                ExpandedRunCard(
-                                    run: run,
-                                    completedStepIDs: completedStepIDs,
-                                    activeTimer: timerForRun,
-                                    projects: projects,
-                                    onTap: { onBench(run) },
-                                    onStart: { step in onStart(run, step, nil) },
-                                    onCard: { onCard(run) },
-                                    onBench: { onBench(run) },
-                                    onRemove: { onRemove(run) },
-                                    onToggleStep: onToggleStep,
-                                    onPause: { if let t = timerForRun { onPauseTimer?(t) } },
-                                    onResume: { if let t = timerForRun { onResumeTimer?(t) } },
-                                    onStop: { if let t = timerForRun { onStopTimer?(t) } }
-                                )
-                                .frame(minHeight: layout.height, alignment: .top)
-                                .padding(.leading, 8)
-                            }
-                        }
+                        RunDurationEvent(
+                            run: run,
+                            zoom: zoom,
+                            height: layout.cardHeight,
+                            startsOnHourLine: run.startMinuteOfDay % 60 == 0,
+                            completedStepIDs: completedStepIDs,
+                            activeTimer: activeTimers.first { $0.runID == run.id },
+                            projects: projects,
+                            onTapRun: { onTapRun(run) },
+                            onStart: { step in onStart(run, step, nil) },
+                            onCard: { onCard(run) },
+                            onBench: { onBench(run) },
+                            onRemove: { onRemove(run) },
+                            onToggleStep: onToggleStep,
+                            onPause: { if let t = activeTimers.first(where: { $0.runID == run.id }) { onPauseTimer?(t) } },
+                            onResume: { if let t = activeTimers.first(where: { $0.runID == run.id }) { onResumeTimer?(t) } },
+                            onStop: { if let t = activeTimers.first(where: { $0.runID == run.id }) { onStopTimer?(t) } }
+                        )
                         .offset(y: layout.y)
                     }
                 }
@@ -1223,38 +1198,116 @@ private struct DynamicHourBlock: View {
         return max(fallback, runs.map { eventLayout(for: $0).bottom }.max() ?? fallback)
     }
 
-    private func eventLayout(for run: LabRun) -> (y: CGFloat, height: CGFloat, bottom: CGFloat) {
+    private func eventLayout(for run: LabRun) -> (y: CGFloat, cardHeight: CGFloat, bottom: CGFloat) {
         let minuteHeight = max(1.2, (zoom == .overview ? 1.2 : 2.8))
         let startOffset = CGFloat(run.startMinuteOfDay - hour * 60)
         let y = max(0, startOffset) * minuteHeight
         let durationHeight = CGFloat(run.scheduledDurationMinutes) * minuteHeight
         let contentMinimum: CGFloat = zoom == .overview ? 64 : CGFloat(max(180, run.steps.count * 42 + 150))
-        let height = max(durationHeight, contentMinimum)
-        return (y, height, y + height)
+        let cardHeight = max(durationHeight, contentMinimum)
+        let startRuleHeight: CGFloat = run.startMinuteOfDay % 60 == 0 ? 0 : 18
+        let endRuleHeight: CGFloat = 26
+        return (y, cardHeight, y + startRuleHeight + cardHeight + endRuleHeight)
     }
 }
 
-private struct TimeRangeMarker: View {
+private struct RunDurationEvent: View {
     let run: LabRun
+    let zoom: TimelineZoom
     let height: CGFloat
+    let startsOnHourLine: Bool
+    let completedStepIDs: Set<String>
+    let activeTimer: ActiveLabTimer?
+    let projects: [Project]
+    let onTapRun: () -> Void
+    let onStart: (LabStep?) -> Void
+    let onCard: () -> Void
+    let onBench: () -> Void
+    let onRemove: () -> Void
+    let onToggleStep: (String) -> Void
+    let onPause: () -> Void
+    let onResume: () -> Void
+    let onStop: () -> Void
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 0) {
-            Text(run.timeLabel)
-
-            Spacer(minLength: 0)
-
-            HStack(spacing: 4) {
-                Text(timeLabelFromMinutes(run.endMinuteOfDay))
-
-                Rectangle()
-                    .fill(Color.secondary.opacity(0.22))
-                    .frame(width: 22, height: 1)
+        VStack(alignment: .leading, spacing: 8) {
+            if !startsOnHourLine {
+                TimelineTimeRule(
+                    label: run.timeLabel,
+                    tint: .secondary,
+                    prominence: 0.12,
+                    labelOpacity: 0.58,
+                    labelWeight: .regular
+                )
             }
+
+            HStack(alignment: .top, spacing: 0) {
+                Color.clear.frame(width: 54)
+
+                if zoom == .overview {
+                    RunChip(
+                        run: run,
+                        completedStepIDs: completedStepIDs,
+                        activeTimer: activeTimer,
+                        projects: projects,
+                        onTap: onTapRun,
+                        onStart: { onStart(nil) },
+                        onCard: onCard,
+                        onRemove: onRemove
+                    )
+                    .frame(minHeight: height, alignment: .top)
+                    .padding(.leading, 8)
+                } else {
+                    ExpandedRunCard(
+                        run: run,
+                        completedStepIDs: completedStepIDs,
+                        activeTimer: activeTimer,
+                        projects: projects,
+                        onTap: onBench,
+                        onStart: onStart,
+                        onCard: onCard,
+                        onBench: onBench,
+                        onRemove: onRemove,
+                        onToggleStep: onToggleStep,
+                        onPause: onPause,
+                        onResume: onResume,
+                        onStop: onStop
+                    )
+                    .frame(minHeight: height, alignment: .top)
+                    .padding(.leading, 8)
+                }
+            }
+
+            TimelineTimeRule(
+                label: timeLabelFromMinutes(run.endMinuteOfDay),
+                tint: .secondary,
+                prominence: 0.12,
+                labelOpacity: 0.58,
+                labelWeight: .regular
+            )
         }
-        .font(.system(size: 9, design: .monospaced).weight(.medium))
-        .foregroundStyle(.secondary.opacity(0.55))
-        .frame(maxWidth: .infinity, minHeight: height, alignment: .trailing)
+    }
+}
+
+private struct TimelineTimeRule: View {
+    let label: String
+    let tint: Color
+    let prominence: Double
+    let labelOpacity: Double
+    let labelWeight: Font.Weight
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(label)
+                .font(.system(size: 11, weight: labelWeight, design: .monospaced))
+                .foregroundStyle(tint.opacity(labelOpacity))
+                .frame(width: 48, alignment: .trailing)
+
+            Rectangle()
+                .fill(tint.opacity(prominence))
+                .frame(height: 1)
+                .padding(.leading, 8)
+        }
     }
 }
 
