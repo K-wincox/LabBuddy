@@ -16,8 +16,8 @@
 - [ ] **PROT-01**: User can create, edit, duplicate, and delete reusable Protocol templates.
 - [ ] **PROT-02**: User can define Protocol steps with ordered instructions, expected duration, optional timer preset, and key metadata fields.
 - [ ] **PROT-03**: User can define Protocol recipe items with amount, unit, concentration note, and optional inventory item link.
-- [ ] **PROT-04**: User can tag a Protocol as cell experiment, molecular cloning/plasmid workflow, Western blot/gel workflow, or general.
-- [ ] **PROT-05**: User can start from starter templates for cell experiments, molecular cloning/plasmid workflows, and Western blot/gel workflows.
+- [ ] **PROT-04**: User can tag a Protocol as cell experiment, animal experiment, nucleic-acid experiment, protein experiment, or a custom local type.
+- [ ] **PROT-05**: User can start from starter templates for cell, animal, nucleic-acid, and protein workflows.
 
 ### Scaling and Calculations
 

@@ -23,7 +23,7 @@ This loop supports both user goals already approved:
 
 ## Requirement Implications
 
-- v1 should include all three initial domains, but with starter templates and generic structured steps rather than exhaustive domain-specific automation.
+- v1 should include the current workflow families: cell, animal, nucleic-acid, and protein experiments, with starter templates and generic structured steps rather than exhaustive domain-specific automation.
 - Timer reliability and Protocol/scaling correctness are foundational and should come before polished Data Cards.
 - Inventory should be local and personal with deductions and low-stock warnings, not team purchasing.
 - AI features remain deferred Pro capabilities.

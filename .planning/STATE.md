@@ -49,7 +49,7 @@ Recent decisions affecting current work:
 
 - v1 is iOS-only and local-first.
 - AI voice scheduling and AI mentor reports are deferred Pro/post-v1 capabilities.
-- v1 supports cell experiments, molecular cloning/plasmid workflows, and Western blot/gel workflows.
+- v1 supports cell experiments, animal experiments, nucleic-acid experiments, and protein experiments.
 - v1 includes both execution and reporting loops.
 
 ### Pending Todos

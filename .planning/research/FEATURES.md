@@ -10,7 +10,7 @@
 - Reusable Protocol templates with structured steps, reagents, expected durations, and metadata fields.
 - Step checklist/run mode so a Protocol can be executed rather than merely read.
 - Protocol scaling from a standard recipe to a run-specific target volume, sample count, or scale factor.
-- Domain-aware starter templates for cell experiments, molecular cloning/plasmid workflows, and Western blot/gel workflows.
+- Domain-aware starter templates for cell, animal, nucleic-acid, and protein workflows.
 
 ### Daily Schedule
 

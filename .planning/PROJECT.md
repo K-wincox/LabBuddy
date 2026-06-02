@@ -18,7 +18,7 @@ Wet-lab researchers can reliably execute and report daily experiments from their
 
 ### Active
 
-- [ ] User can store reusable wet-lab Protocols for the first supported experiment families: cell experiments, molecular cloning/plasmid workflows, and Western blot/gel workflows.
+- [ ] User can store reusable wet-lab Protocols for the current v1 supported experiment families: cell experiments, animal experiments, nucleic-acid experiments, and protein experiments.
 - [ ] User can call a Protocol with a different target volume or scale and automatically calculate adjusted reagent amounts from the standard recipe.
 - [ ] User can import a scaled Protocol into a daily experiment schedule.
 - [ ] Daily Schedule can show planned experiments on a timeline or board, including carried-over operations from previous or future days.
@@ -37,7 +37,7 @@ Wet-lab researchers can reliably execute and report daily experiments from their
 - Android app — iOS-only first version keeps the lock-screen, Live Activity/Dynamic Island, and always-on timer experience focused.
 - Account system and cloud sync — first version is a local personal tool; sync and collaboration add privacy, infrastructure, and subscription complexity.
 - Desktop-first LIMS/ELN workflows — LabBuddy is intentionally bench-side and lightweight rather than a full lab management platform.
-- Broad support for every wet-lab domain — v1 is limited to cell experiments, molecular cloning/plasmid workflows, and Western blot/gel workflows.
+- Broad support for every wet-lab domain — v1 is limited to cell experiments, animal experiments, nucleic-acid experiments, and protein experiments, with custom local areas available for personalization.
 - AI voice scheduling in v1 — valuable Pro capability, but deferred until the manual scheduling loop is proven.
 - AI mentor-report assistant in v1 — valuable Pro capability, but deferred until Data Cards and metadata capture are proven.
 - Team inventory, shared lab purchasing, and admin approval flows — v1 focuses on the individual researcher's personal bench workflow.
@@ -48,11 +48,12 @@ Wet-lab researchers often use fragmented tools at the bench: paper or PDF Protoc
 
 LabBuddy should treat the phone as the first production tool for bench-side work. The experience should be quick, glanceable, and forgiving when the user is wearing gloves or switching between experiments. The product should avoid turning into a slow form-heavy system.
 
-The first supported experiment families are:
+The current v1 supported experiment families are:
 
 - Cell experiments, such as culture media preparation, passaging, treatment schedules, incubation, and carry-over reminders.
-- Molecular cloning and plasmid workflows, such as plasmid extraction, digestion/ligation, transformation, colony PCR, and sequencing-prep style steps.
-- Western blot and gel workflows, such as gel running, transfer, blocking, antibody incubation, washing, imaging, and gel result sharing.
+- Animal experiments, such as dosing, sampling, observation, and multi-day carry-over operations.
+- Nucleic-acid experiments, such as extraction, digestion/ligation, transformation, PCR, and sequencing-prep style steps.
+- Protein experiments, such as gel running, transfer, blocking, antibody incubation, washing, imaging, and gel result sharing.
 
 The v1 product intentionally includes both loops:
 
@@ -64,7 +65,7 @@ The v1 product intentionally includes both loops:
 - **Platform**: iOS only for v1 — lock-screen timers, Live Activities/Dynamic Island, notification behavior, camera annotation, and local storage can be designed deeply for one platform first.
 - **Data model**: Local-first personal data — no account, cloud sync, or team collaboration in v1.
 - **AI scope**: AI features are Pro and post-v1 — manual scheduling and template-based reporting must work before AI voice scheduling or AI report generation.
-- **Domain scope**: First release supports three experiment families — cell experiments, molecular cloning/plasmid workflows, and Western blot/gel workflows.
+- **Domain scope**: First release supports the current v1 experiment families — cell experiments, animal experiments, nucleic-acid experiments, and protein experiments.
 - **Interaction design**: Bench-side mobile use — core actions must be fast, large enough for gloved use, and readable under time pressure.
 - **Business model**: Free/Pro split should preserve basic utility while reserving high-intensity workflow accelerators for Pro.
 
@@ -74,7 +75,7 @@ The v1 product intentionally includes both loops:
 |----------|-----------|---------|
 | Build LabBuddy as a mobile bench-side tool, not a desktop LIMS/ELN | The key user pain is high-frequency wet-lab execution while standing at the bench | — Pending |
 | Support both execution and reporting loops in v1 | The product needs both daily utility and the viral Data Card sharing hook | — Pending |
-| Limit first supported domains to cell experiments, molecular cloning/plasmid workflows, and Western blot/gel workflows | Narrower Protocol templates and metadata models will produce a more credible first experience | — Pending |
+| Limit first supported domains to cell experiments, animal experiments, nucleic-acid experiments, and protein experiments | The app has converged on these v1 workflow families after iteration; custom areas remain available for local personalization | — Pending |
 | Make v1 iOS only | iOS enables a strong lock-screen, Live Activity/Dynamic Island, notification, and camera workflow | — Pending |
 | Keep first version local-only | Avoids account, sync, privacy, and infrastructure complexity while validating personal workflow value | — Pending |
 | Defer AI voice scheduling and AI mentor reports to Pro/post-v1 | AI is compelling but should not block validation of manual scheduling, timers, metadata, and Data Cards | — Pending |

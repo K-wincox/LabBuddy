@@ -14,7 +14,7 @@ The product connects Protocol preparation, automatic recipe scaling, daily sched
 - **Platform**: iOS only for v1 — lock-screen timers, Live Activities/Dynamic Island, notification behavior, camera annotation, and local storage can be designed deeply for one platform first.
 - **Data model**: Local-first personal data — no account, cloud sync, or team collaboration in v1.
 - **AI scope**: AI features are Pro and post-v1 — manual scheduling and template-based reporting must work before AI voice scheduling or AI report generation.
-- **Domain scope**: First release supports three experiment families — cell experiments, molecular cloning/plasmid workflows, and Western blot/gel workflows.
+- **Domain scope**: First release supports the current v1 workflow families — cell experiments, animal experiments, nucleic-acid experiments, and protein experiments.
 - **Interaction design**: Bench-side mobile use — core actions must be fast, large enough for gloved use, and readable under time pressure.
 - **Business model**: Free/Pro split should preserve basic utility while reserving high-intensity workflow accelerators for Pro.
 <!-- GSD:project-end -->

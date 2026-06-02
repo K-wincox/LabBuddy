@@ -46,14 +46,14 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. User can create, edit, duplicate, and delete Protocol templates.
   2. Protocols support ordered steps, expected durations, timer presets, metadata fields, and recipe items.
-  3. User can classify Protocols by the three v1 wet-lab domains.
-  4. User can start from starter templates for cell, plasmid/cloning, and Western blot/gel workflows.
+  3. User can classify Protocols by the current v1 workflow families: cell, animal, nucleic-acid, and protein experiments.
+  4. User can start from starter templates for cell, animal, nucleic-acid, and protein workflows.
 **Plans**: 3 plans
 
 Plans:
 - [ ] 02-01: Build Protocol CRUD and library browsing.
 - [ ] 02-02: Add structured step, metadata, recipe, and domain tagging support.
-- [ ] 02-03: Add starter templates for the three v1 experiment families.
+- [ ] 02-03: Add starter templates for the current v1 workflow families.
 
 ### Phase 3: Scaling and Calculator Toolkit
 **Goal**: Convert Protocol templates into scaled experiment runs and provide core bench calculation tools.

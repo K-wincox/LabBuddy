@@ -20,7 +20,7 @@ Phase 2 defines LabBuddy's reusable Protocol library: browsing, creating, editin
 
 ### Library Browsing
 - **D-04:** The Protocol list uses search, experiment-type filters, and recency/favorite prioritization.
-- **D-05:** Supported filters must cover at least all v1 experiment families: cell experiments, molecular cloning/plasmid workflows, and Western blot/gel workflows.
+- **D-05:** Supported filters must cover at least all current v1 workflow families: cell experiments, animal experiments, nucleic-acid experiments, and protein experiments.
 - **D-06:** Protocol cards show medium-density information: name, experiment type, expected duration, key variables, recent-use signal, and source.
 - **D-07:** Cards open a detail view where the Protocol can be reviewed and edited.
 
@@ -67,7 +67,7 @@ Phase 2 defines LabBuddy's reusable Protocol library: browsing, creating, editin
 ### Current Implementation Context
 - `LabBuddy/ContentView.swift` — Contains the current prototype Protocol view, editor, extraction sheet, and current scheduling coupling that may need correction.
 - `LabBuddy/Models.swift` — Contains current prototype models for `LabProtocol`, `ProtocolIngredient`, `ProtocolVariable`, `ProtocolSource`, and `LabStep`.
-- `LabBuddy/SampleData.swift` — Contains current starter Protocols and examples for the three initial experiment families.
+- `LabBuddy/SampleData.swift` — Contains current starter Protocols and examples for the v1 workflow families.
 
 </canonical_refs>
 

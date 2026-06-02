@@ -52,7 +52,7 @@ Phase 7 defines LabBuddy's personal local inventory model and how it appears ins
 
 ### the agent's Discretion
 - The agent may choose the exact secondary-page navigation and inventory summary visuals.
-- The agent may choose the initial categories and sample inventory items, biased toward the three v1 wet-lab domains.
+- The agent may choose the initial categories and sample inventory items, biased toward the current v1 workflow families.
 
 </decisions>
 
