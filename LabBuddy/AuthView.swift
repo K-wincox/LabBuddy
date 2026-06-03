@@ -13,33 +13,20 @@ struct AuthView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.labBackground.ignoresSafeArea()
+                AuthBackdrop()
 
                 VStack(spacing: 0) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 28) {
-                            brandBlock
-                                .padding(.top, 44)
+                    Spacer(minLength: 76)
 
-                            formBlock
-
-                            if let message = authStore.errorMessage {
-                                Text(message)
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(.red)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-
-                            Text("开发测试 API：\(AuthService.shared.baseURL.absoluteString)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding(.top, 4)
-                        }
-                        .padding(.horizontal, 28)
+                    VStack(alignment: .leading, spacing: 22) {
+                        header
+                        formCard
                     }
+                    .padding(.horizontal, 26)
 
-                    bottomActions
+                    Spacer(minLength: 18)
+
+                    footer
                 }
             }
             .navigationTitle("")
@@ -57,20 +44,39 @@ struct AuthView: View {
         }
     }
 
-    private var brandBlock: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.teal.opacity(0.12))
-                Image(systemName: "flask.fill")
-                    .font(.system(size: 32, weight: .semibold))
-                    .foregroundStyle(.teal)
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(.white.opacity(0.55))
+                    Image(systemName: "flask.fill")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(.teal)
+                }
+                .frame(width: 52, height: 52)
+
+                Spacer()
+
+                if step != .login {
+                    Button("Log in") {
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            step = .login
+                            code = ""
+                            authStore.errorMessage = nil
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary.opacity(0.72))
+                    .padding(.horizontal, 16)
+                    .frame(height: 38)
+                    .background(.white.opacity(0.46), in: Capsule())
+                }
             }
-            .frame(width: 60, height: 60)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("LabBuddy")
-                    .font(.system(size: 36, weight: .bold, design: .default))
+                Text(step.title)
+                    .font(.system(size: 40, weight: .regular, design: .default))
                     .tracking(0)
                 Text(step.subtitle)
                     .font(.subheadline)
@@ -81,67 +87,97 @@ struct AuthView: View {
         }
     }
 
-    private var formBlock: some View {
-        VStack(spacing: 12) {
-            TextField("邮箱", text: $email)
-                .keyboardType(.emailAddress)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .textContentType(.username)
-                .authFieldStyle()
-
-            if step.requiresPassword {
-                SecureField("密码", text: $password)
-                    .textContentType(step == .login ? .password : .newPassword)
-                    .authFieldStyle()
+    private var formCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Text("LabBuddy")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(step == .login ? "Sign up" : "Sign in") {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        secondaryAction()
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary.opacity(0.82))
+                .padding(.horizontal, 14)
+                .frame(height: 34)
+                .background(.white.opacity(0.46), in: Capsule())
             }
 
-            if step == .registerCode {
-                TextField("验证码", text: $code)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .authFieldStyle()
+            VStack(spacing: 12) {
+                AuthInputRow(icon: "at", placeholder: "e-mail address", text: $email, kind: .email)
+
+                if step.requiresPassword {
+                    AuthInputRow(icon: "key", placeholder: "password", text: $password, kind: .password)
+                }
+
+                if step == .registerCode {
+                    AuthInputRow(icon: "number", placeholder: "verification code", text: $code, kind: .code)
+                }
             }
+
+            HStack(alignment: .bottom, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let message = authStore.errorMessage {
+                        Text(message)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text(step.helper)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Text(AuthService.shared.baseURL.host() ?? "local")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary.opacity(0.72))
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await submit() }
+                } label: {
+                    ZStack {
+                        Capsule()
+                            .fill(canSubmit ? Color.black.opacity(0.88) : Color.black.opacity(0.12))
+                            .frame(width: 64, height: 48)
+                        if authStore.isLoading {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "chevron.right")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(canSubmit ? .white : .secondary)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSubmit || authStore.isLoading)
+            }
+            .padding(.top, 6)
         }
+        .padding(22)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(.white.opacity(0.46), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.08), radius: 22, x: 0, y: 16)
     }
 
-    private var bottomActions: some View {
-        VStack(spacing: 14) {
-            Button {
-                Task { await submit() }
-            } label: {
-                HStack(spacing: 8) {
-                    if authStore.isLoading {
-                        ProgressView()
-                            .tint(.white)
-                    }
-                    Text(step.primaryTitle)
-                        .font(.headline)
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 54)
-                .background(canSubmit ? Color.teal : Color.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-                .foregroundStyle(canSubmit ? Color.white : Color.teal.opacity(0.65))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSubmit || authStore.isLoading)
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    secondaryAction()
-                }
-            } label: {
-                Text(step.secondaryTitle)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.teal)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 30)
-            }
+    private var footer: some View {
+        VStack(spacing: 8) {
+            Text("实验数据默认保存在本机")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 14)
-        .padding(.bottom, 16)
-        .background(.regularMaterial)
+        .padding(.bottom, 22)
     }
 
     private var canSubmit: Bool {
@@ -163,7 +199,7 @@ struct AuthView: View {
             _ = await authStore.loginPassword(email: trimmedEmail, password: password)
         case .registerForm:
             if await authStore.registerStart(email: trimmedEmail, password: password) {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(.easeInOut(duration: 0.22)) {
                     code = ""
                     step = .registerCode
                 }
@@ -185,52 +221,132 @@ struct AuthView: View {
     }
 }
 
+private struct AuthBackdrop: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.94, green: 0.98, blue: 0.98),
+                    Color(red: 0.98, green: 0.94, blue: 0.90),
+                    Color(red: 0.93, green: 0.97, blue: 0.96),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            Circle()
+                .fill(Color.white.opacity(0.36))
+                .frame(width: 250, height: 250)
+                .offset(x: 120, y: -190)
+
+            Circle()
+                .stroke(Color.white.opacity(0.58), lineWidth: 26)
+                .frame(width: 250, height: 250)
+                .offset(x: 82, y: -70)
+
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.teal.opacity(0.12))
+                .frame(width: 120, height: 300)
+                .rotationEffect(.degrees(-12))
+                .offset(x: -170, y: 60)
+
+            Circle()
+                .fill(Color.orange.opacity(0.22))
+                .frame(width: 170, height: 170)
+                .offset(x: 150, y: 240)
+        }
+    }
+}
+
+private struct AuthInputRow: View {
+    enum Kind {
+        case email
+        case password
+        case code
+    }
+
+    let icon: String
+    let placeholder: String
+    @Binding var text: String
+    let kind: Kind
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(.white.opacity(0.72))
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary.opacity(0.72))
+            }
+            .frame(width: 38, height: 38)
+
+            field
+                .font(.body)
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 58)
+        .background(.white.opacity(0.45), in: Capsule())
+    }
+
+    @ViewBuilder
+    private var field: some View {
+        switch kind {
+        case .email:
+            TextField(placeholder, text: $text)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textContentType(.username)
+        case .password:
+            SecureField(placeholder, text: $text)
+                .textContentType(.password)
+        case .code:
+            TextField(placeholder, text: $text)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+        }
+    }
+}
+
 private enum AuthStep {
     case login
     case registerForm
     case registerCode
 
+    var title: String {
+        switch self {
+        case .login: return "Log in"
+        case .registerForm: return "Sign up"
+        case .registerCode: return "Verify"
+        }
+    }
+
     var subtitle: String {
         switch self {
         case .login:
-            return "登录后进入你的实验台。今日排程、Protocol 与本地记录会保持在这台设备上。"
+            return "进入你的实验台，继续今日排程、Protocol 和计时器。"
         case .registerForm:
-            return "创建账号后可用于 Pro 权益、设备备份和后续同步。"
+            return "创建账号，为 Pro 权益和后续云备份预留身份。"
         case .registerCode:
             return "输入邮箱收到的 6 位验证码，完成注册。"
         }
     }
 
-    var primaryTitle: String {
+    var helper: String {
         switch self {
-        case .login: return "登录"
-        case .registerForm: return "获取验证码"
-        case .registerCode: return "完成注册"
-        }
-    }
-
-    var secondaryTitle: String {
-        switch self {
-        case .login: return "创建新账号"
-        case .registerForm, .registerCode: return "返回登录"
+        case .login:
+            return "使用邮箱和密码登录。"
+        case .registerForm:
+            return "密码至少 8 位。验证码将发送到邮箱。"
+        case .registerCode:
+            return "没有收到验证码时，返回登录后重新注册。"
         }
     }
 
     var requiresPassword: Bool {
         self != .registerCode
-    }
-}
-
-private extension View {
-    func authFieldStyle() -> some View {
-        self
-            .font(.body)
-            .padding(.horizontal, 14)
-            .frame(height: 52)
-            .background(Color.white.opacity(0.86), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
-            )
     }
 }
