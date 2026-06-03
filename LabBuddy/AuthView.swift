@@ -16,10 +16,12 @@ struct AuthView: View {
                 AuthBackdrop()
 
                 VStack(spacing: 0) {
-                    Spacer(minLength: 76)
+                    Spacer(minLength: step == .login ? 76 : 122)
 
                     VStack(alignment: .leading, spacing: 22) {
-                        header
+                        if step == .login {
+                            header
+                        }
                         formCard
                     }
                     .padding(.horizontal, 26)
