@@ -10,6 +10,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /out/labbuddy-api ./cmd/api
 FROM debian:bookworm-slim
 
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out/labbuddy-api /app/labbuddy-api
 COPY migrations /app/migrations
 EXPOSE 8088

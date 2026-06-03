@@ -148,6 +148,7 @@ RETURNING email_verified`, emailAddr, string(passwordHash)).Scan(&verified)
 	}
 
 	if err := a.createAndSendCode(r.Context(), emailAddr, codePurposeRegister); err != nil {
+		log.Printf("send verification code failed: purpose=%s email=%s error=%v", codePurposeRegister, emailAddr, err)
 		writeErr(w, http.StatusInternalServerError, "send_code_failed")
 		return
 	}
@@ -279,6 +280,7 @@ SELECT EXISTS (
 		return
 	}
 	if err := a.createAndSendCode(r.Context(), emailAddr, codePurposeLogin); err != nil {
+		log.Printf("send verification code failed: purpose=%s email=%s error=%v", codePurposeLogin, emailAddr, err)
 		writeErr(w, http.StatusInternalServerError, "send_code_failed")
 		return
 	}

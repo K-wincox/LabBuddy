@@ -28,7 +28,7 @@ Keep `.env` on the server only. For QQ mail development SMTP:
 ```env
 EMAIL_MODE=smtp
 SMTP_HOST=smtp.qq.com
-SMTP_PORT=587
+SMTP_PORT=465
 SMTP_USER=your_email@qq.com
 SMTP_PASSWORD=mail_authorization_code
 SMTP_FROM=your_email@qq.com
