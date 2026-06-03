@@ -4,98 +4,45 @@ struct AuthView: View {
     @EnvironmentObject private var authStore: AuthSessionStore
     @Environment(\.dismiss) private var dismiss
     var isGate = false
-    @State private var mode: AuthMode = .login
+
+    @State private var step: AuthStep = .login
     @State private var email = ""
     @State private var password = ""
     @State private var code = ""
-    @State private var waitingForRegisterCode = false
-    @State private var waitingForLoginCode = false
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.teal.opacity(0.14))
-                            Image(systemName: "flask.fill")
-                                .font(.system(size: 34, weight: .semibold))
-                                .foregroundStyle(.teal)
+            ZStack {
+                Color.labBackground.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 28) {
+                            brandBlock
+                                .padding(.top, 44)
+
+                            formBlock
+
+                            if let message = authStore.errorMessage {
+                                Text(message)
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.red)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+
+                            Text("开发测试 API：\(AuthService.shared.baseURL.absoluteString)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.top, 4)
                         }
-                        .frame(width: 64, height: 64)
-
-                        Text("LabBuddy")
-                            .font(.largeTitle.weight(.bold))
-                        Text("登录后进入你的实验台。Protocol、今日排程、计时器和本地记录会保持在这台设备上。")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 28)
-
-                Picker("模式", selection: $mode) {
-                    ForEach(AuthMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    TextField("QQ 邮箱 / 邮箱", text: $email)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .textFieldStyle(.roundedBorder)
-
-                    if mode != .codeLogin {
-                        SecureField("密码（至少 8 位）", text: $password)
-                            .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal, 28)
                     }
 
-                    if waitingForRegisterCode || waitingForLoginCode {
-                        TextField("6 位验证码", text: $code)
-                            .keyboardType(.numberPad)
-                        .textFieldStyle(.roundedBorder)
-                    }
+                    bottomActions
                 }
-                .padding(14)
-                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
-
-                if let message = authStore.errorMessage {
-                    Text(message)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                    Text("开发测试 API：\(AuthService.shared.baseURL.absoluteString)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                }
-                .padding(20)
             }
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 10) {
-                    primaryButton
-                    if mode == .login {
-                        Button("使用邮箱验证码登录") {
-                            mode = .codeLogin
-                            waitingForLoginCode = false
-                            code = ""
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.teal)
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 10)
-                .background(.regularMaterial)
-            }
-            .background(Color.labBackground.ignoresSafeArea())
-            .navigationTitle(isGate ? "" : "LabBuddy 账号")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if !isGate {
@@ -107,80 +54,183 @@ struct AuthView: View {
             .onChange(of: authStore.isAuthenticated) { _, isAuthenticated in
                 if isAuthenticated && !isGate { dismiss() }
             }
-            .onChange(of: mode) { _, _ in
-                waitingForRegisterCode = false
-                waitingForLoginCode = false
-                code = ""
+        }
+    }
+
+    private var brandBlock: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.teal.opacity(0.12))
+                Image(systemName: "flask.fill")
+                    .font(.system(size: 32, weight: .semibold))
+                    .foregroundStyle(.teal)
+            }
+            .frame(width: 60, height: 60)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("LabBuddy")
+                    .font(.system(size: 36, weight: .bold, design: .default))
+                    .tracking(0)
+                Text(step.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    @ViewBuilder
-    private var primaryButton: some View {
-        Button {
-            Task { await submit() }
-        } label: {
-            HStack {
-                if authStore.isLoading {
-                    ProgressView()
-                        .tint(.white)
+    private var formBlock: some View {
+        VStack(spacing: 12) {
+            TextField("邮箱", text: $email)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textContentType(.username)
+                .authFieldStyle()
+
+            if step.requiresPassword {
+                SecureField("密码", text: $password)
+                    .textContentType(step == .login ? .password : .newPassword)
+                    .authFieldStyle()
+            }
+
+            if step == .registerCode {
+                TextField("验证码", text: $code)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .authFieldStyle()
+            }
+        }
+    }
+
+    private var bottomActions: some View {
+        VStack(spacing: 14) {
+            Button {
+                Task { await submit() }
+            } label: {
+                HStack(spacing: 8) {
+                    if authStore.isLoading {
+                        ProgressView()
+                            .tint(.white)
+                    }
+                    Text(step.primaryTitle)
+                        .font(.headline)
                 }
-                Text(buttonTitle)
-                    .font(.headline)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background(canSubmit ? Color.teal : Color.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                .foregroundStyle(canSubmit ? Color.white : Color.teal.opacity(0.65))
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
+            .buttonStyle(.plain)
+            .disabled(!canSubmit || authStore.isLoading)
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    secondaryAction()
+                }
+            } label: {
+                Text(step.secondaryTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.teal)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30)
+            }
         }
-        .buttonStyle(.borderedProminent)
-        .tint(.teal)
-        .opacity(authStore.isLoading || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
-        .disabled(authStore.isLoading || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .padding(.horizontal, 28)
+        .padding(.top, 14)
+        .padding(.bottom, 16)
+        .background(.regularMaterial)
     }
 
-    private var buttonTitle: String {
-        switch mode {
+    private var canSubmit: Bool {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch step {
         case .login:
-            return "登录"
-        case .register:
-            return waitingForRegisterCode ? "完成注册" : "获取注册验证码"
-        case .codeLogin:
-            return waitingForLoginCode ? "验证码登录" : "获取登录验证码"
+            return !trimmedEmail.isEmpty && !password.isEmpty
+        case .registerForm:
+            return !trimmedEmail.isEmpty && password.count >= 8
+        case .registerCode:
+            return !trimmedEmail.isEmpty && code.count == 6
         }
     }
 
     private func submit() async {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch mode {
+        switch step {
         case .login:
             _ = await authStore.loginPassword(email: trimmedEmail, password: password)
-        case .register:
-            if waitingForRegisterCode {
-                _ = await authStore.registerVerify(email: trimmedEmail, code: code)
-            } else if await authStore.registerStart(email: trimmedEmail, password: password) {
-                waitingForRegisterCode = true
+        case .registerForm:
+            if await authStore.registerStart(email: trimmedEmail, password: password) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    code = ""
+                    step = .registerCode
+                }
             }
-        case .codeLogin:
-            if waitingForLoginCode {
-                _ = await authStore.loginCodeVerify(email: trimmedEmail, code: code)
-            } else if await authStore.loginCodeStart(email: trimmedEmail) {
-                waitingForLoginCode = true
-            }
+        case .registerCode:
+            _ = await authStore.registerVerify(email: trimmedEmail, code: code)
+        }
+    }
+
+    private func secondaryAction() {
+        authStore.errorMessage = nil
+        switch step {
+        case .login:
+            step = .registerForm
+        case .registerForm, .registerCode:
+            step = .login
+            code = ""
         }
     }
 }
 
-private enum AuthMode: String, CaseIterable, Identifiable {
+private enum AuthStep {
     case login
-    case register
-    case codeLogin
+    case registerForm
+    case registerCode
 
-    var id: String { rawValue }
-
-    var title: String {
+    var subtitle: String {
         switch self {
-        case .login: return "密码登录"
-        case .register: return "注册"
-        case .codeLogin: return "验证码"
+        case .login:
+            return "登录后进入你的实验台。今日排程、Protocol 与本地记录会保持在这台设备上。"
+        case .registerForm:
+            return "创建账号后可用于 Pro 权益、设备备份和后续同步。"
+        case .registerCode:
+            return "输入邮箱收到的 6 位验证码，完成注册。"
         }
+    }
+
+    var primaryTitle: String {
+        switch self {
+        case .login: return "登录"
+        case .registerForm: return "获取验证码"
+        case .registerCode: return "完成注册"
+        }
+    }
+
+    var secondaryTitle: String {
+        switch self {
+        case .login: return "创建新账号"
+        case .registerForm, .registerCode: return "返回登录"
+        }
+    }
+
+    var requiresPassword: Bool {
+        self != .registerCode
+    }
+}
+
+private extension View {
+    func authFieldStyle() -> some View {
+        self
+            .font(.body)
+            .padding(.horizontal, 14)
+            .frame(height: 52)
+            .background(Color.white.opacity(0.86), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
+            )
     }
 }
