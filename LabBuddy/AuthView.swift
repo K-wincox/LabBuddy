@@ -16,12 +16,9 @@ struct AuthView: View {
                 AuthBackdrop()
 
                 VStack(spacing: 0) {
-                    Spacer(minLength: step == .login ? 76 : 122)
+                    Spacer(minLength: 154)
 
                     VStack(alignment: .leading, spacing: 22) {
-                        if step == .login {
-                            header
-                        }
                         formCard
                     }
                     .padding(.horizontal, 26)
@@ -46,55 +43,17 @@ struct AuthView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(.white.opacity(0.55))
-                    Image(systemName: "flask.fill")
-                        .font(.system(size: 26, weight: .semibold))
-                        .foregroundStyle(.teal)
-                }
-                .frame(width: 52, height: 52)
-
-                Spacer()
-
-                if step != .login {
-                    Button("Log in") {
-                        withAnimation(.easeInOut(duration: 0.22)) {
-                            step = .login
-                            code = ""
-                            authStore.errorMessage = nil
-                        }
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary.opacity(0.72))
-                    .padding(.horizontal, 16)
-                    .frame(height: 38)
-                    .background(.white.opacity(0.46), in: Capsule())
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(step.title)
-                    .font(.system(size: 40, weight: .regular, design: .default))
-                    .tracking(0)
-                Text(step.subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
     private var formCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Text("LabBuddy")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(step.title)
+                        .font(.system(size: 32, weight: .regular))
+                    Text(step.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Spacer()
                 Button(step == .login ? "Sign up" : "Sign in") {
                     withAnimation(.easeInOut(duration: 0.22)) {
@@ -162,15 +121,15 @@ struct AuthView: View {
                 .buttonStyle(.plain)
                 .disabled(!canSubmit || authStore.isLoading)
             }
-            .padding(.top, 6)
+            .padding(.top, 4)
         }
-        .padding(22)
+        .padding(24)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(.white.opacity(0.46), lineWidth: 1)
+                .stroke(.white.opacity(0.62), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.08), radius: 22, x: 0, y: 16)
+        .shadow(color: .black.opacity(0.07), radius: 24, x: 0, y: 18)
     }
 
     private var footer: some View {
@@ -179,7 +138,7 @@ struct AuthView: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
         }
-        .padding(.bottom, 22)
+        .padding(.bottom, 24)
     }
 
     private var canSubmit: Bool {
@@ -239,13 +198,13 @@ private struct AuthBackdrop: View {
 
             Circle()
                 .fill(Color.white.opacity(0.36))
-                .frame(width: 250, height: 250)
+                .frame(width: 240, height: 240)
                 .offset(x: 120, y: -190)
 
             Circle()
-                .stroke(Color.white.opacity(0.58), lineWidth: 26)
-                .frame(width: 250, height: 250)
-                .offset(x: 82, y: -70)
+                .stroke(Color.white.opacity(0.52), lineWidth: 24)
+                .frame(width: 235, height: 235)
+                .offset(x: 76, y: -60)
 
             RoundedRectangle(cornerRadius: 8)
                 .fill(Color.teal.opacity(0.12))
@@ -254,8 +213,8 @@ private struct AuthBackdrop: View {
                 .offset(x: -170, y: 60)
 
             Circle()
-                .fill(Color.orange.opacity(0.22))
-                .frame(width: 170, height: 170)
+                .fill(Color.orange.opacity(0.18))
+                .frame(width: 164, height: 164)
                 .offset(x: 150, y: 240)
         }
     }
@@ -290,7 +249,11 @@ private struct AuthInputRow: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 58)
-        .background(.white.opacity(0.45), in: Capsule())
+        .background(.white.opacity(0.66), in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(.white.opacity(0.58), lineWidth: 1)
+        )
     }
 
     @ViewBuilder
