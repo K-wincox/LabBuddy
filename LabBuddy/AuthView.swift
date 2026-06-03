@@ -94,9 +94,6 @@ struct AuthView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    Text(AuthService.shared.baseURL.host() ?? "local")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary.opacity(0.72))
                 }
 
                 Spacer()

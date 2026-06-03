@@ -8,8 +8,8 @@ final class AuthService {
     private let encoder = JSONEncoder()
 
     var baseURL: URL {
-        let raw = UserDefaults.standard.string(forKey: "authAPIBaseURL") ?? "http://172.16.8.18:8088"
-        return URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)) ?? URL(string: "http://172.16.8.18:8088")!
+        let raw = UserDefaults.standard.string(forKey: "authAPIBaseURL") ?? "http://172.16.14.27:18088"
+        return URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)) ?? URL(string: "http://172.16.14.27:18088")!
     }
 
     func registerStart(email: String, password: String) async throws {

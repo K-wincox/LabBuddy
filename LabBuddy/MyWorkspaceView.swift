@@ -364,7 +364,7 @@ struct PreferencesSheet: View {
     @AppStorage("preferencesAutoSave") private var autoSave = true
     @AppStorage("preferencesShowStepDuration") private var showStepDuration = true
     @AppStorage("preferencesCompactCards") private var compactCards = false
-    @AppStorage("authAPIBaseURL") private var authAPIBaseURL = "http://172.16.8.18:8088"
+    @AppStorage("authAPIBaseURL") private var authAPIBaseURL = "http://172.16.14.27:18088"
     @Environment(\.dismiss) private var dismiss
 
     private let fontScaleOptions: [(String, Double)] = [("小", 0.85), ("标准", 1.0), ("大", 1.15), ("超大", 1.3)]
@@ -388,7 +388,7 @@ struct PreferencesSheet: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                    Text("同一局域网真机测试使用 http://172.16.8.18:8088；公网测试时改为你的公网地址。")
+                    Text("同一局域网真机测试使用 Mac 隧道地址；公网测试时改为你的公网地址。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
