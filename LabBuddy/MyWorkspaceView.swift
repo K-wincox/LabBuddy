@@ -160,21 +160,6 @@ struct MyWorkspaceView: View {
                     }
                     .buttonStyle(.plain)
 
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("账号")
-                            .font(.headline)
-                        MyActionRow(icon: "person.text.rectangle", title: "用户与偏好设置", subtitle: "账号、安全、服务器和实验台偏好") {
-                            showPreferences = true
-                        }
-                        if authStore.isAuthenticated {
-                            MyActionRow(icon: "rectangle.portrait.and.arrow.right", title: "退出登录", subtitle: "退出后本机实验数据不会删除", tint: .red) {
-                                authStore.signOut()
-                            }
-                        }
-                    }
-                    .padding(16)
-                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
-
                     // Inventory summary card
                     Button {
                         showInventoryPage = true
@@ -355,6 +340,7 @@ struct PreferencesSheet: View {
     @Binding var largeBenchMode: Bool
     @Binding var displayName: String
     @Binding var labName: String
+    @EnvironmentObject private var authStore: AuthSessionStore
     @AppStorage("preferencesFontScale") private var fontScale = 1.0
     @AppStorage("preferencesColorScheme") private var colorSchemeRaw = "system"
     @AppStorage("preferencesHaptics") private var hapticsEnabled = true
@@ -522,6 +508,22 @@ struct PreferencesSheet: View {
 
                 Section {
                     MyActionRow(icon: "creditcard", title: "Pro 订阅权益", subtitle: isProUser ? "已解锁：AI 助手 · 语音调度" : "去除结果卡片水印 · AI 助手 · 语音调度 · 即将推出", disabled: !isProUser) {}
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        authStore.signOut()
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Text("退出登录")
+                                .font(.subheadline.weight(.semibold))
+                            Spacer()
+                        }
+                    }
+                } footer: {
+                    Text("退出登录不会删除本机实验记录、Protocol 或库存数据。")
                 }
             }
             .navigationTitle("偏好设置")
