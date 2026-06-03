@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var pastDays: [ExperimentDayRecord] = []
     @State private var inventoryItems: [InventoryItem] = []
     @State private var projects: [Project] = []
+    @StateObject private var authStore = AuthSessionStore()
     @AppStorage("lastLabBuddyOpenDate") private var lastOpenDate = ""
     @State private var showNewDaySheet = false
 
@@ -38,7 +39,9 @@ struct ContentView: View {
         .onAppear {
             loadAll()
             checkNewDay()
+            authStore.bootstrap()
         }
+        .environmentObject(authStore)
         .onChange(of: importedRuns) { _, newValue in saveImportedRuns(newValue) }
         .onChange(of: tomorrowRuns) { _, newValue in saveTomorrowRuns(newValue) }
         .onChange(of: pastDays) { _, newValue in savePastDays(newValue) }
