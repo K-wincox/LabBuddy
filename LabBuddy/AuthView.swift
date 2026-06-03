@@ -3,6 +3,7 @@ import SwiftUI
 struct AuthView: View {
     @EnvironmentObject private var authStore: AuthSessionStore
     @Environment(\.dismiss) private var dismiss
+    var isGate = false
     @State private var mode: AuthMode = .login
     @State private var email = ""
     @State private var password = ""
@@ -12,7 +13,27 @@ struct AuthView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 18) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.teal.opacity(0.14))
+                            Image(systemName: "flask.fill")
+                                .font(.system(size: 34, weight: .semibold))
+                                .foregroundStyle(.teal)
+                        }
+                        .frame(width: 64, height: 64)
+
+                        Text("LabBuddy")
+                            .font(.largeTitle.weight(.bold))
+                        Text("登录后进入你的实验台。Protocol、今日排程、计时器和本地记录会保持在这台设备上。")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 28)
+
                 Picker("模式", selection: $mode) {
                     ForEach(AuthMode.allCases) { mode in
                         Text(mode.title).tag(mode)
@@ -35,9 +56,11 @@ struct AuthView: View {
                     if waitingForRegisterCode || waitingForLoginCode {
                         TextField("6 位验证码", text: $code)
                             .keyboardType(.numberPad)
-                            .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.roundedBorder)
                     }
                 }
+                .padding(14)
+                .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
 
                 if let message = authStore.errorMessage {
                     Text(message)
@@ -46,6 +69,14 @@ struct AuthView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
+                    Text("开发测试 API：\(AuthService.shared.baseURL.absoluteString)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .padding(20)
+            }
+            .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
                     primaryButton
                     if mode == .login {
@@ -58,19 +89,23 @@ struct AuthView: View {
                         .foregroundStyle(.teal)
                     }
                 }
-
-                Spacer()
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 10)
+                .background(.regularMaterial)
             }
-            .padding(18)
-            .navigationTitle("LabBuddy 账号")
+            .background(Color.labBackground.ignoresSafeArea())
+            .navigationTitle(isGate ? "" : "LabBuddy 账号")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { dismiss() }
+                if !isGate {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("关闭") { dismiss() }
+                    }
                 }
             }
             .onChange(of: authStore.isAuthenticated) { _, isAuthenticated in
-                if isAuthenticated { dismiss() }
+                if isAuthenticated && !isGate { dismiss() }
             }
             .onChange(of: mode) { _, _ in
                 waitingForRegisterCode = false
@@ -98,6 +133,7 @@ struct AuthView: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(.teal)
+        .opacity(authStore.isLoading || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
         .disabled(authStore.isLoading || email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 

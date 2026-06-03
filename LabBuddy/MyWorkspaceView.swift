@@ -107,7 +107,6 @@ struct MyWorkspaceView: View {
     @State private var showInventoryPage = false
     @State private var showPreferences = false
     @State private var showCreateProject = false
-    @State private var showAuth = false
     @EnvironmentObject private var authStore: AuthSessionStore
     @State private var transactions: [InventoryTransaction] = {
         guard let data = UserDefaults.standard.data(forKey: "inventoryTransactions"),
@@ -126,7 +125,9 @@ struct MyWorkspaceView: View {
                 VStack(alignment: .leading, spacing: 14) {
 
                     // Identity card
-                    VStack(alignment: .leading, spacing: 14) {
+                    Button {
+                        showPreferences = true
+                    } label: {
                         HStack(spacing: 14) {
                             ZStack {
                                 Circle().fill(Color.teal.opacity(0.18))
@@ -150,36 +151,25 @@ struct MyWorkspaceView: View {
                                     .foregroundStyle(.teal)
                             }
                             Spacer()
-                            if authStore.isAuthenticated {
-                                Button {
-                                    authStore.signOut()
-                                } label: {
-                                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                                        .font(.title3)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .buttonStyle(.plain)
-                            } else {
-                                Button {
-                                    showAuth = true
-                                } label: {
-                                    Text("登录")
-                                        .font(.subheadline.weight(.bold))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 8)
-                                        .background(Color.teal, in: Capsule())
-                                }
-                                .buttonStyle(.plain)
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(16)
+                        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("账号")
+                            .font(.headline)
+                        MyActionRow(icon: "person.text.rectangle", title: "用户与偏好设置", subtitle: "账号、安全、服务器和实验台偏好") {
+                            showPreferences = true
+                        }
+                        if authStore.isAuthenticated {
+                            MyActionRow(icon: "rectangle.portrait.and.arrow.right", title: "退出登录", subtitle: "退出后本机实验数据不会删除", tint: .red) {
+                                authStore.signOut()
                             }
-                            Button {
-                                showPreferences = true
-                            } label: {
-                                Image(systemName: "gearshape")
-                                    .font(.title3)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
                         }
                     }
                     .padding(16)
@@ -327,20 +317,10 @@ struct MyWorkspaceView: View {
                     .padding(16)
                     .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
 
-                    // Account and future capabilities
+                    // Future capabilities
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("账号")
+                        Text("未来能力")
                             .font(.headline)
-                        if authStore.isAuthenticated {
-                            MyActionRow(icon: "checkmark.seal", title: "已登录", subtitle: authStore.user?.email ?? "LabBuddy 账号") {}
-                            MyActionRow(icon: "rectangle.portrait.and.arrow.right", title: "退出登录", subtitle: "退出后本机实验数据不会删除", tint: .red) {
-                                authStore.signOut()
-                            }
-                        } else {
-                            MyActionRow(icon: "person.badge.key", title: "注册 / 登录", subtitle: "用于未来 Pro 权益和云备份；当前实验数据仍保存在本机") {
-                                showAuth = true
-                            }
-                        }
                         MyActionRow(icon: "icloud", title: "云同步与协作", subtitle: "v1 保持关闭，数据仅存本机", disabled: true) {}
                         MyActionRow(icon: "creditcard", title: "Pro 订阅", subtitle: "去除结果卡片水印、AI 助手、语音调度等 · 即将推出", disabled: true) {}
                     }
@@ -360,10 +340,6 @@ struct MyWorkspaceView: View {
             CreateProjectSheet { newProject in
                 projects.append(newProject)
             }
-        }
-        .sheet(isPresented: $showAuth) {
-            AuthView()
-                .environmentObject(authStore)
         }
     }
 

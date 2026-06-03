@@ -11,37 +11,21 @@ struct ContentView: View {
     @State private var showNewDaySheet = false
 
     var body: some View {
-        NavigationStack {
-            TabView {
-                TodayView(
-                    importedRuns: $importedRuns,
-                    tomorrowRuns: $tomorrowRuns,
-                    pastDays: $pastDays,
-                    projects: projects,
-                    onEndDay: endDay
-                )
-                .tabItem { Label("今日", systemImage: "calendar") }
-
-                ProtocolLibraryView()
-                    .tabItem { Label("Protocol", systemImage: "list.clipboard") }
-
-                CalculatorToolkitView()
-                    .tabItem { Label("工具", systemImage: "function") }
-
-                NavigationStack {
-                    MyWorkspaceView(items: $inventoryItems, projects: $projects, resetDemoData: resetDemoData)
-                        .navigationTitle("我的")
-                }
-                .tabItem { Label("我的", systemImage: "person.crop.circle") }
+        Group {
+            if authStore.isAuthenticated {
+                mainApp
+            } else {
+                AuthView(isGate: true)
             }
-            .tint(.teal)
         }
         .onAppear {
             loadAll()
-            checkNewDay()
             authStore.bootstrap()
         }
         .environmentObject(authStore)
+        .onChange(of: authStore.isAuthenticated) { _, isAuthenticated in
+            if isAuthenticated { checkNewDay() }
+        }
         .onChange(of: importedRuns) { _, newValue in saveImportedRuns(newValue) }
         .onChange(of: tomorrowRuns) { _, newValue in saveTomorrowRuns(newValue) }
         .onChange(of: pastDays) { _, newValue in savePastDays(newValue) }
@@ -55,6 +39,26 @@ struct ContentView: View {
                 },
                 dismiss: { showNewDaySheet = false }
             )
+        }
+    }
+
+    private var mainApp: some View {
+        NavigationStack {
+            TabView {
+                TodayView(importedRuns: $importedRuns, tomorrowRuns: $tomorrowRuns, pastDays: $pastDays, projects: projects, onEndDay: endDay)
+                    .tabItem { Label("今日", systemImage: "calendar") }
+
+                ProtocolLibraryView()
+                    .tabItem { Label("Protocol", systemImage: "list.clipboard") }
+                CalculatorToolkitView()
+                    .tabItem { Label("工具", systemImage: "function") }
+                NavigationStack {
+                    MyWorkspaceView(items: $inventoryItems, projects: $projects, resetDemoData: resetDemoData)
+                        .navigationTitle("我的")
+                }
+                .tabItem { Label("我的", systemImage: "person.crop.circle") }
+            }
+            .tint(.teal)
         }
     }
 
