@@ -8,6 +8,8 @@ struct ContentView: View {
     @State private var projects: [Project] = []
     @StateObject private var authStore = AuthSessionStore()
     @AppStorage("lastLabBuddyOpenDate") private var lastOpenDate = ""
+    @AppStorage("preferencesColorScheme") private var colorSchemeRaw = "system"
+    @AppStorage("preferencesFontScale") private var fontScale = 1.0
     @State private var showNewDaySheet = false
 
     var body: some View {
@@ -24,7 +26,12 @@ struct ContentView: View {
         }
         .environmentObject(authStore)
         .onChange(of: authStore.isAuthenticated) { _, isAuthenticated in
-            if isAuthenticated { checkNewDay() }
+            if isAuthenticated {
+                loadAuthenticatedWorkspace()
+            }
+        }
+        .onChange(of: authStore.user) { _, _ in
+            loadAuthenticatedWorkspace()
         }
         .onChange(of: importedRuns) { _, newValue in saveImportedRuns(newValue) }
         .onChange(of: tomorrowRuns) { _, newValue in saveTomorrowRuns(newValue) }
@@ -39,6 +46,25 @@ struct ContentView: View {
                 },
                 dismiss: { showNewDaySheet = false }
             )
+        }
+        .preferredColorScheme(preferredColorScheme)
+        .environment(\.dynamicTypeSize, preferredDynamicTypeSize)
+    }
+
+    private var preferredColorScheme: ColorScheme? {
+        switch colorSchemeRaw {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
+    }
+
+    private var preferredDynamicTypeSize: DynamicTypeSize {
+        switch fontScale {
+        case ..<0.95: return .small
+        case 1.15..<1.25: return .large
+        case 1.25...: return .xLarge
+        default: return .medium
         }
     }
 
@@ -104,6 +130,12 @@ struct ContentView: View {
 
     // MARK: - Persistence helpers
 
+    private func loadAuthenticatedWorkspace() {
+        guard authStore.isAuthenticated else { return }
+        loadAll()
+        checkNewDay()
+    }
+
     private func loadAll() {
         if let data = UserDefaults.standard.data(forKey: "importedLabRuns"),
            let runs = try? JSONDecoder().decode([LabRun].self, from: data) {
@@ -112,7 +144,11 @@ struct ContentView: View {
             importedRuns = []
         }
         if let data = UserDefaults.standard.data(forKey: "tomorrowLabRuns"),
-           let runs = try? JSONDecoder().decode([LabRun].self, from: data) { tomorrowRuns = runs }
+           let runs = try? JSONDecoder().decode([LabRun].self, from: data) {
+            tomorrowRuns = runs
+        } else {
+            tomorrowRuns = []
+        }
         if let data = UserDefaults.standard.data(forKey: "pastExperimentDays"),
            let days = try? JSONDecoder().decode([ExperimentDayRecord].self, from: data) {
             pastDays = days
@@ -126,9 +162,14 @@ struct ContentView: View {
             inventoryItems = []
         }
         if let data = UserDefaults.standard.data(forKey: "userProjects"),
-           let projs = try? JSONDecoder().decode([Project].self, from: data), !projs.isEmpty { projects = projs }
+           let projs = try? JSONDecoder().decode([Project].self, from: data), !projs.isEmpty {
+            projects = projs
+        } else {
+            projects = []
+        }
         normalizeImportedStepTimers()
         migrateLegacyProjects()
+        seedDemoDataIfNeeded()
     }
 
     private func normalizeImportedStepTimers() {
@@ -177,7 +218,7 @@ struct ContentView: View {
         for run in allRuns {
             if let ctx = run.projectID, !ctx.isEmpty, !projects.contains(where: { $0.id == ctx }) {
                 // Legacy free-text projectContext — create a Project from it
-                let newProject = Project(name: ctx, colorHex: Project.palette.randomElement()?.hex ?? "#4ECDC4", description: "")
+                let newProject = Project(name: ctx, colorHex: Project.nextPaletteHex(for: projects.count), description: "")
                 projects.append(newProject)
                 needsSave = true
             }
@@ -232,6 +273,44 @@ struct ContentView: View {
         saveTomorrowRuns(tomorrowRuns)
         savePastDays(pastDays)
         saveInventoryItems(inventoryItems)
+    }
+
+    private func seedDemoDataIfNeeded() {
+        guard authStore.user?.email.lowercased() == SampleData.demoUserEmail else { return }
+        let flagKey = "demoSeeded.\(SampleData.demoUserEmail).20260606.v3"
+        guard !UserDefaults.standard.bool(forKey: flagKey) else { return }
+
+        importedRuns = SampleData.demoTodayRuns
+        tomorrowRuns = []
+        pastDays = SampleData.demoPastDays
+        inventoryItems = SampleData.demoInventory
+        projects = SampleData.demoProjects
+
+        let protocols = mergeByID(SampleData.protocols + SampleData.demoProtocols)
+        if let data = try? JSONEncoder().encode(protocols) {
+            UserDefaults.standard.set(data, forKey: "savedProtocols")
+        }
+        if let data = try? JSONEncoder().encode(SampleData.demoBufferTemplates) {
+            UserDefaults.standard.set(data, forKey: "customBufferTemplates")
+        }
+
+        saveImportedRuns(importedRuns)
+        saveTomorrowRuns(tomorrowRuns)
+        savePastDays(pastDays)
+        saveInventoryItems(inventoryItems)
+        saveProjects(projects)
+        UserDefaults.standard.set(true, forKey: flagKey)
+    }
+
+    private func mergeByID<T: Identifiable>(_ items: [T]) -> [T] where T.ID == String {
+        var seen = Set<String>()
+        var merged: [T] = []
+        for item in items {
+            guard !seen.contains(item.id) else { continue }
+            seen.insert(item.id)
+            merged.append(item)
+        }
+        return merged
     }
 
     // MARK: - Date helpers

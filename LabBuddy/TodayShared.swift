@@ -39,7 +39,71 @@ func timeLabelFromMinutes(_ minutes: Int) -> String {
     return String(format: "%02d:%02d", clamped / 60, clamped % 60)
 }
 
+enum EventColorRegistry {
+    static let defaultPalette: [(name: String, hex: String)] = [
+        ("蓝", "#007AFF"),
+        ("绿", "#34C759"),
+        ("靛蓝", "#5856D6"),
+        ("橙", "#FF9500"),
+        ("紫", "#AF52DE"),
+        ("薄荷", "#00C7BE"),
+        ("红", "#FF3B30"),
+        ("青", "#32ADE6"),
+        ("黄", "#FFCC00"),
+        ("粉", "#FF375F"),
+        ("柔紫", "#6366EA"),
+        ("天蓝", "#3DAEE9")
+    ]
+
+    private static let paletteKey = "eventColorPaletteHexes"
+    private static let assignmentKey = "eventColorAssignments"
+
+    static var paletteHexes: [String] {
+        let stored = UserDefaults.standard.stringArray(forKey: paletteKey) ?? []
+        let validStored = stored.filter { !$0.isEmpty }
+        return validStored.isEmpty ? defaultPalette.map(\.hex) : validStored
+    }
+
+    static func color(for semanticKey: String) -> Color {
+        Color(hex: hex(for: semanticKey))
+    }
+
+    static func hex(for semanticKey: String) -> String {
+        let palette = paletteHexes
+        guard !palette.isEmpty else { return "#007AFF" }
+
+        var assignments = UserDefaults.standard.dictionary(forKey: assignmentKey) as? [String: Int] ?? [:]
+        if let index = assignments[semanticKey] {
+            return palette[index % palette.count]
+        }
+
+        let nextIndex = assignments.count % palette.count
+        assignments[semanticKey] = nextIndex
+        UserDefaults.standard.set(assignments, forKey: assignmentKey)
+        return palette[nextIndex]
+    }
+
+    static func updatePalette(_ hexes: [String]) {
+        let cleaned = hexes.filter { !$0.isEmpty }
+        UserDefaults.standard.set(cleaned.isEmpty ? defaultPalette.map(\.hex) : cleaned, forKey: paletteKey)
+        UserDefaults.standard.removeObject(forKey: assignmentKey)
+    }
+
+    static func resetPalette() {
+        UserDefaults.standard.removeObject(forKey: paletteKey)
+        UserDefaults.standard.removeObject(forKey: assignmentKey)
+    }
+}
+
 extension LabRun {
+    var eventColor: Color {
+        EventColorRegistry.color(for: eventColorKey)
+    }
+
+    var eventColorKey: String {
+        "\(protocolName)|\(title)|\(area.rawValue)"
+    }
+
     var startMinuteOfDay: Int {
         minutesFromTimeLabel(timeLabel) ?? 9 * 60
     }

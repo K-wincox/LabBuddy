@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 // Shared inventory category list — single source of truth
@@ -33,8 +34,8 @@ enum UnitCategory: String, CaseIterable, Identifiable {
     var builtInUnits: [String] {
         switch self {
         case .volume: return ["ml", "μl", "L"]
-        case .mass: return ["g", "mg", "μg", "kg"]
-        case .concentration: return ["M", "mM", "μM", "nM", "%", "mg/ml", "μg/ml"]
+        case .mass: return ["g", "mg", "μg", "ng", "kg"]
+        case .concentration: return ["M", "mM", "μM", "nM", "%", "mg/ml", "μg/ml", "μg/μl", "ng/μl"]
         case .count: return ["支", "个", "瓶", "盒", "片", "板", "管", "份"]
         case .custom: return []
         }
@@ -96,6 +97,10 @@ enum UnifiedUnits {
     }
 }
 
+enum ProfileAvatarStorage {
+    static let userDefaultsKey = "profileAvatarData"
+}
+
 struct MyWorkspaceView: View {
     @Binding var items: [InventoryItem]
     @Binding var projects: [Project]
@@ -107,6 +112,7 @@ struct MyWorkspaceView: View {
     @State private var showInventoryPage = false
     @State private var showPreferences = false
     @State private var showCreateProject = false
+    @State private var avatarData = UserDefaults.standard.data(forKey: ProfileAvatarStorage.userDefaultsKey)
     @EnvironmentObject private var authStore: AuthSessionStore
     @State private var transactions: [InventoryTransaction] = {
         guard let data = UserDefaults.standard.data(forKey: "inventoryTransactions"),
@@ -116,6 +122,15 @@ struct MyWorkspaceView: View {
 
     private var lowStockItems: [InventoryItem] { items.filter(\.isLowStock) }
     private var recentItems: [InventoryItem] { Array(items.prefix(3)) }
+    private var effectiveDisplayName: String {
+        let localName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if authStore.isAuthenticated {
+            if !localName.isEmpty && localName != "未登录用户" { return localName }
+            let remoteName = authStore.user?.displayName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return remoteName.isEmpty ? "未命名用户" : remoteName
+        }
+        return localName.isEmpty ? "未登录用户" : localName
+    }
 
     var body: some View {
         ZStack {
@@ -129,16 +144,10 @@ struct MyWorkspaceView: View {
                         showPreferences = true
                     } label: {
                         HStack(spacing: 14) {
-                            ZStack {
-                                Circle().fill(Color.teal.opacity(0.18))
-                                Image(systemName: "person.fill")
-                                    .font(.title)
-                                    .foregroundStyle(.teal)
-                            }
-                            .frame(width: 62, height: 62)
+                            ProfileAvatarView(avatarData: avatarData, size: 62)
 
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(authStore.user?.displayName.isEmpty == false ? authStore.user?.displayName ?? displayName : displayName)
+                                Text(effectiveDisplayName)
                                     .font(.title3.bold())
                                 Text(authStore.user?.email ?? labName)
                                     .font(.subheadline)
@@ -278,7 +287,11 @@ struct MyWorkspaceView: View {
                                 .padding(.vertical, 8)
                         } else {
                             ForEach(projects) { project in
-                                ProjectRowView(project: project)
+                                ProjectRowView(
+                                    project: project,
+                                    onUpdate: { updatedProject in updateProject(updatedProject) },
+                                    onDelete: { deleteProject(project) }
+                                )
                             }
                         }
                     }
@@ -319,10 +332,15 @@ struct MyWorkspaceView: View {
             InventoryPageView(items: $items, transactions: $transactions, onTransactionSaved: saveTransactions)
         }
         .sheet(isPresented: $showPreferences) {
-            PreferencesSheet(largeBenchMode: $largeBenchMode, displayName: $displayName, labName: $labName)
+            PreferencesSheet(
+                largeBenchMode: $largeBenchMode,
+                displayName: $displayName,
+                labName: $labName,
+                avatarData: $avatarData
+            )
         }
         .sheet(isPresented: $showCreateProject) {
-            CreateProjectSheet { newProject in
+            CreateProjectSheet(suggestedColorHex: Project.nextPaletteHex(for: projects.count)) { newProject in
                 projects.append(newProject)
             }
         }
@@ -332,6 +350,38 @@ struct MyWorkspaceView: View {
         guard let data = try? JSONEncoder().encode(transactions) else { return }
         UserDefaults.standard.set(data, forKey: "inventoryTransactions")
     }
+
+    private func deleteProject(_ project: Project) {
+        projects.removeAll { $0.id == project.id }
+    }
+
+    private func updateProject(_ project: Project) {
+        guard let index = projects.firstIndex(where: { $0.id == project.id }) else { return }
+        projects[index] = project
+    }
+}
+
+struct ProfileAvatarView: View {
+    let avatarData: Data?
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle().fill(Color.teal.opacity(0.18))
+            if let avatarData, let image = UIImage(data: avatarData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "person.fill")
+                    .font(.system(size: size * 0.42, weight: .semibold))
+                    .foregroundStyle(.teal)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.white.opacity(0.9), lineWidth: 2))
+    }
 }
 
 // MARK: - Preferences Sheet
@@ -340,6 +390,7 @@ struct PreferencesSheet: View {
     @Binding var largeBenchMode: Bool
     @Binding var displayName: String
     @Binding var labName: String
+    @Binding var avatarData: Data?
     @EnvironmentObject private var authStore: AuthSessionStore
     @AppStorage("preferencesFontScale") private var fontScale = 1.0
     @AppStorage("preferencesColorScheme") private var colorSchemeRaw = "system"
@@ -350,7 +401,8 @@ struct PreferencesSheet: View {
     @AppStorage("preferencesAutoSave") private var autoSave = true
     @AppStorage("preferencesShowStepDuration") private var showStepDuration = true
     @AppStorage("preferencesCompactCards") private var compactCards = false
-    @AppStorage("authAPIBaseURL") private var authAPIBaseURL = "http://172.16.14.27:18088"
+    @AppStorage("authAPIBaseURL") private var authAPIBaseURL = AuthService.defaultBaseURL
+    @State private var selectedAvatarItem: PhotosPickerItem?
     @Environment(\.dismiss) private var dismiss
 
     private let fontScaleOptions: [(String, Double)] = [("小", 0.85), ("标准", 1.0), ("大", 1.15), ("超大", 1.3)]
@@ -365,8 +417,43 @@ struct PreferencesSheet: View {
         NavigationStack {
             Form {
                 Section("个人信息") {
-                    TextField("显示名称", text: $displayName)
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 10) {
+                            PhotosPicker(selection: $selectedAvatarItem, matching: .images) {
+                                ZStack(alignment: .bottomTrailing) {
+                                    ProfileAvatarView(avatarData: avatarData, size: 88)
+                                    Image(systemName: "camera.fill")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 28, height: 28)
+                                        .background(Color.teal, in: Circle())
+                                        .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                }
+                            }
+                            .buttonStyle(.plain)
+
+                            Text("点击更换头像")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            if avatarData != nil {
+                                Button("移除头像", role: .destructive) {
+                                    avatarData = nil
+                                    UserDefaults.standard.removeObject(forKey: ProfileAvatarStorage.userDefaultsKey)
+                                }
+                                .font(.caption.weight(.semibold))
+                            }
+                        }
+                        Spacer()
+                    }
+                    .listRowInsets(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16))
+
+                    TextField("昵称", text: $displayName)
                     TextField("实验室 / 项目空间", text: $labName)
+                    if let email = authStore.user?.email {
+                        LabeledContent("登录邮箱", value: email)
+                    }
                 }
 
                 Section("服务器") {
@@ -401,6 +488,18 @@ struct PreferencesSheet: View {
                     }
 
                     Toggle("紧凑卡片模式", isOn: $compactCards)
+
+                    NavigationLink {
+                        EventColorPreferencesView()
+                    } label: {
+                        HStack {
+                            Label("实验颜色顺序", systemImage: "paintpalette")
+                            Spacer()
+                            Text("\(EventColorRegistry.paletteHexes.count) 色")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
 
                 Section("实验台") {
@@ -533,6 +632,19 @@ struct PreferencesSheet: View {
                     Button("完成") { dismiss() }
                 }
             }
+            .onChange(of: selectedAvatarItem) { _, item in
+                Task { await loadAvatar(from: item) }
+            }
+        }
+    }
+
+    private func loadAvatar(from item: PhotosPickerItem?) async {
+        guard let item,
+              let data = try? await item.loadTransferable(type: Data.self),
+              UIImage(data: data) != nil else { return }
+        await MainActor.run {
+            avatarData = data
+            UserDefaults.standard.set(data, forKey: ProfileAvatarStorage.userDefaultsKey)
         }
     }
 }
@@ -1077,6 +1189,8 @@ private func defaultRestock(for unit: String) -> Double {
 
 struct ProjectRowView: View {
     let project: Project
+    let onUpdate: (Project) -> Void
+    let onDelete: () -> Void
     @State private var showDetail = false
 
     var body: some View {
@@ -1097,6 +1211,12 @@ struct ProjectRowView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
+                    if let endsAt = project.endsAt {
+                        Text("结束 \(endsAt.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -1108,7 +1228,7 @@ struct ProjectRowView: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showDetail) {
-            ProjectDetailView(project: project)
+            ProjectDetailView(project: project, onUpdate: onUpdate, onDelete: onDelete)
         }
     }
 }
@@ -1116,11 +1236,14 @@ struct ProjectRowView: View {
 // MARK: - Create Project Sheet
 
 struct CreateProjectSheet: View {
+    let suggestedColorHex: String
     let onSave: (Project) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var selectedColorHex = Project.palette[0].hex
     @State private var description = ""
+    @State private var hasEndTime = false
+    @State private var endTime = Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date()
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 5)
 
@@ -1151,6 +1274,12 @@ struct CreateProjectSheet: View {
                 Section("描述（可选）") {
                     TextField("项目目标或备注", text: $description)
                 }
+                Section("结束时间") {
+                    Toggle("设置结束时间", isOn: $hasEndTime)
+                    if hasEndTime {
+                        DatePicker("结束时间", selection: $endTime, displayedComponents: [.date, .hourAndMinute])
+                    }
+                }
             }
             .navigationTitle("新建项目")
             .navigationBarTitleDisplayMode(.inline)
@@ -1159,13 +1288,21 @@ struct CreateProjectSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
                         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                        let project = Project(name: name.trimmingCharacters(in: .whitespaces), colorHex: selectedColorHex, description: description.trimmingCharacters(in: .whitespaces))
+                        let project = Project(
+                            name: name.trimmingCharacters(in: .whitespaces),
+                            colorHex: selectedColorHex,
+                            description: description.trimmingCharacters(in: .whitespaces),
+                            endsAt: hasEndTime ? endTime : nil
+                        )
                         onSave(project)
                         dismiss()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+        }
+        .onAppear {
+            selectedColorHex = suggestedColorHex
         }
     }
 }
@@ -1174,31 +1311,69 @@ struct CreateProjectSheet: View {
 
 struct ProjectDetailView: View {
     let project: Project
+    let onUpdate: (Project) -> Void
+    let onDelete: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var showDeleteConfirm = false
+    @State private var editedName: String
+    @State private var editedColorHex: String
+    @State private var editedDescription: String
+    @State private var hasEndTime: Bool
+    @State private var editedEndTime: Date
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 5)
+
+    init(project: Project, onUpdate: @escaping (Project) -> Void, onDelete: @escaping () -> Void) {
+        self.project = project
+        self.onUpdate = onUpdate
+        self.onDelete = onDelete
+        _editedName = State(initialValue: project.name)
+        _editedColorHex = State(initialValue: project.colorHex)
+        _editedDescription = State(initialValue: project.description)
+        _hasEndTime = State(initialValue: project.endsAt != nil)
+        _editedEndTime = State(initialValue: project.endsAt ?? Calendar.current.date(byAdding: .month, value: 1, to: Date()) ?? Date())
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 Section("项目信息") {
-                    HStack {
-                        Text("名称")
-                        Spacer()
-                        Text(project.name).foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Text("颜色")
-                        Spacer()
-                        Circle()
-                            .fill(Color(hex: project.colorHex))
-                            .frame(width: 18, height: 18)
-                    }
-                    if !project.description.isEmpty {
-                        HStack {
-                            Text("描述")
-                            Spacer()
-                            Text(project.description).foregroundStyle(.secondary)
+                    TextField("项目名称", text: $editedName)
+
+                    TextField("描述（可选）", text: $editedDescription, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+
+                Section("颜色标识") {
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(Project.palette, id: \.hex) { item in
+                            ZStack {
+                                Circle()
+                                    .fill(Color(hex: item.hex))
+                                    .frame(width: 38, height: 38)
+                                if editedColorHex == item.hex {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                            .contentShape(Circle())
+                            .onTapGesture { editedColorHex = item.hex }
                         }
                     }
+                    .padding(.vertical, 4)
+                }
+
+                Section("时间") {
+                    Toggle("设置结束时间", isOn: $hasEndTime)
+                    if hasEndTime {
+                        DatePicker(
+                            "结束时间",
+                            selection: $editedEndTime,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                    }
+
                     HStack {
                         Text("创建时间")
                         Spacer()
@@ -1207,17 +1382,136 @@ struct ProjectDetailView: View {
                     }
                 }
             }
-            .navigationTitle(project.name)
+            .navigationTitle(editedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "项目" : editedName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
+                    Button("保存") {
+                        saveProject()
+                        dismiss()
+                    }
+                    .disabled(editedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            .confirmationDialog("删除项目", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("删除「\(project.name)」", role: .destructive) {
+                    onDelete()
+                    dismiss()
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("只会删除项目标签，不会删除已经创建的实验记录。")
+            }
+        }
+    }
+
+    private func saveProject() {
+        var updated = project
+        updated.name = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.colorHex = editedColorHex
+        updated.description = editedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.endsAt = hasEndTime ? editedEndTime : nil
+        onUpdate(updated)
+    }
+}
+
+
+// MARK: - Event Color Preferences
+
+struct EventColorPreferencesView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var rows: [EventColorRow] = EventColorRegistry.paletteHexes.enumerated().map {
+        EventColorRow(hex: $0.element, order: $0.offset)
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach($rows) { $row in
+                    HStack(spacing: 12) {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(Color(hex: row.hex))
+                            .frame(width: 28, height: 28)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("颜色 \(row.order + 1)")
+                                .font(.subheadline.weight(.semibold))
+                            Text(row.hex)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        ColorPicker("", selection: Binding(
+                            get: { Color(hex: row.hex) },
+                            set: { row.hex = $0.toHexFallback(currentHex: row.hex) }
+                        ), supportsOpacity: false)
+                        .labelsHidden()
+                    }
+                    .padding(.vertical, 4)
+                }
+                .onMove { source, destination in
+                    rows.move(fromOffsets: source, toOffset: destination)
+                    normalizeColorOrder()
+                }
+            } header: {
+                Text("统一顺序")
+            } footer: {
+                Text("新出现的实验会按照这个顺序依次分配颜色；修改顺序后，已分配关系会重新生成。")
+            }
+
+            Section {
+                Button {
+                    rows.append(EventColorRow(hex: "#007AFF", order: rows.count))
+                } label: {
+                    Label("添加颜色", systemImage: "plus.circle.fill")
+                }
+
+                Button("恢复 Apple 默认配色", role: .destructive) {
+                    EventColorRegistry.resetPalette()
+                    rows = EventColorRegistry.paletteHexes.enumerated().map {
+                        EventColorRow(hex: $0.element, order: $0.offset)
+                    }
+                }
+            }
+        }
+        .navigationTitle("实验颜色")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                EditButton()
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("保存") {
+                    normalizeColorOrder()
+                    EventColorRegistry.updatePalette(rows.map(\.hex))
+                    dismiss()
+                }
+                .fontWeight(.semibold)
+            }
+        }
+    }
+
+    private func normalizeColorOrder() {
+        for index in rows.indices {
+            rows[index].order = index
         }
     }
 }
 
+struct EventColorRow: Identifiable {
+    let id = UUID()
+    var hex: String
+    var order: Int
+}
 
 // MARK: - Unit Management View
 

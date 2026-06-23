@@ -27,6 +27,7 @@ struct ProtocolLibraryView: View {
         let raw = UserDefaults.standard.string(forKey: "protocolRecentIDs") ?? ""
         return raw.split(separator: ",").map(String.init)
     }()
+    @State private var editMode: EditMode = .inactive
 
     private var filteredProtocols: [LabProtocol] {
         var list = editableProtocols
@@ -44,10 +45,14 @@ struct ProtocolLibraryView: View {
             let lFav = favoriteIDs.contains(lhs.id)
             let rFav = favoriteIDs.contains(rhs.id)
             if lFav != rFav { return lFav }
-            let lRecent = recentIDs.firstIndex(of: lhs.id) ?? Int.max
-            let rRecent = recentIDs.firstIndex(of: rhs.id) ?? Int.max
-            return lRecent < rRecent
+            let lhsIndex = editableProtocols.firstIndex(where: { $0.id == lhs.id }) ?? Int.max
+            let rhsIndex = editableProtocols.firstIndex(where: { $0.id == rhs.id }) ?? Int.max
+            return lhsIndex < rhsIndex
         }
+    }
+
+    private var canReorder: Bool {
+        selectedFilter == nil && searchText.isEmpty
     }
 
     var body: some View {
@@ -104,11 +109,9 @@ struct ProtocolLibraryView: View {
                         ProtocolLibraryCard(
                             labProtocol: labProtocol,
                             onTap: {
-                                recordRecent(labProtocol.id)
                                 selectedProtocol = labProtocol
                             },
                             onEdit: {
-                                recordRecent(labProtocol.id)
                                 editingProtocol = labProtocol
                             },
                             onDelete: {
@@ -127,6 +130,11 @@ struct ProtocolLibraryView: View {
                                 Label("删除", systemImage: "trash")
                             }
                         }
+                    }
+                    .onMove { source, destination in
+                        guard canReorder else { return }
+                        editableProtocols.move(fromOffsets: source, toOffset: destination)
+                        save()
                     }
 
                     // Bottom action row — scroll down to reach
@@ -164,6 +172,18 @@ struct ProtocolLibraryView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .environment(\.editMode, $editMode)
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if canReorder {
+                    Button(editMode == .active ? "完成" : "排序") {
+                        editMode = editMode == .active ? .inactive : .active
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.teal)
+                }
             }
         }
         .sheet(item: $selectedProtocol) { labProtocol in

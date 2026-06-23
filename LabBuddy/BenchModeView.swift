@@ -657,9 +657,8 @@ struct BenchModeView: View {
                             .font(isCurrent ? .title3.weight(.bold) : .body.weight(.medium))
                             .strikethrough(isDone)
                             .foregroundStyle(isCurrent ? .primary : (isDone ? .secondary : .secondary))
-                        Text(highlightedLabParameters(step.detail))
+                        StepDetailText(detail: step.detail, isDone: isDone, lineLimit: isCurrent ? nil : 2)
                             .font(isCurrent ? .body : .subheadline)
-                            .lineLimit(isCurrent ? nil : 2)
                             .fixedSize(horizontal: false, vertical: isCurrent)
                     }
                     Spacer()

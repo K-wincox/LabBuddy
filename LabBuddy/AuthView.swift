@@ -68,7 +68,7 @@ struct AuthView: View {
             }
 
             VStack(spacing: 12) {
-                AuthInputRow(icon: "at", placeholder: "e-mail address", text: $email, kind: .email)
+                AuthInputRow(icon: "at", placeholder: step == .login ? "account or e-mail" : "e-mail address", text: $email, kind: .email)
 
                 if step.requiresPassword {
                     AuthInputRow(icon: "key", placeholder: "password", text: $password, kind: .password)

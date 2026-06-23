@@ -3,13 +3,32 @@ import UIKit
 
 final class AuthService {
     static let shared = AuthService()
+    static let defaultBaseURL = "http://127.0.0.1:18088"
 
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
 
     var baseURL: URL {
-        let raw = UserDefaults.standard.string(forKey: "authAPIBaseURL") ?? "http://172.16.14.27:18088"
-        return URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)) ?? URL(string: "http://172.16.14.27:18088")!
+        let raw = UserDefaults.standard.string(forKey: "authAPIBaseURL") ?? Self.defaultBaseURL
+        let normalized = normalizedBaseURL(raw)
+        if normalized != raw.trimmingCharacters(in: .whitespacesAndNewlines) {
+            UserDefaults.standard.set(normalized, forKey: "authAPIBaseURL")
+        }
+        return URL(string: normalized) ?? URL(string: Self.defaultBaseURL)!
+    }
+
+    private func normalizedBaseURL(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: trimmed), let host = url.host else {
+            return Self.defaultBaseURL
+        }
+
+        // Old simulator preferences can pin the app to a stale LAN address and
+        // override the code default. Reset known development tunnel addresses.
+        if host.hasPrefix("172.16."), url.port == 18088 {
+            return Self.defaultBaseURL
+        }
+        return trimmed
     }
 
     func registerStart(email: String, password: String) async throws {

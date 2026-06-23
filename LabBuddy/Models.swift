@@ -44,21 +44,27 @@ struct Project: Identifiable, Hashable, Codable {
     var name: String
     var colorHex: String
     var description: String
+    var endsAt: Date?
     let createdAt: Date
 
-    init(id: String = UUID().uuidString, name: String, colorHex: String, description: String = "", createdAt: Date = Date()) {
+    init(id: String = UUID().uuidString, name: String, colorHex: String, description: String = "", endsAt: Date? = nil, createdAt: Date = Date()) {
         self.id = id
         self.name = name
         self.colorHex = colorHex
         self.description = description
+        self.endsAt = endsAt
         self.createdAt = createdAt
     }
 
     static let palette: [(name: String, hex: String)] = [
-        ("薄荷绿", "#4ECDC4"), ("海蓝", "#4A90D9"), ("紫罗兰", "#9B59B6"),
-        ("珊瑚橙", "#E67E22"), ("翡翠绿", "#27AE60"), ("玫瑰红", "#E74C3C"),
-        ("靛蓝", "#2C3E80"), ("藤黄", "#F39C12"), ("灰蓝", "#607D8B"), ("粉色", "#E91E63"),
+        ("蓝", "#007AFF"), ("绿", "#34C759"), ("靛蓝", "#5856D6"),
+        ("橙", "#FF9500"), ("紫", "#AF52DE"), ("薄荷", "#00C7BE"),
+        ("红", "#FF3B30"), ("青", "#32ADE6"), ("黄", "#FFCC00"), ("粉", "#FF375F"),
     ]
+
+    static func nextPaletteHex(for index: Int) -> String {
+        palette[index % palette.count].hex
+    }
 }
 
 struct LabStep: Identifiable, Hashable, Codable {
@@ -207,13 +213,51 @@ struct ProtocolIngredient: Identifiable, Hashable, Codable {
     var standardAmount: Double
     var unit: String
     var isFormula: Bool  // true = 公式模式（可缩放），false = 固定值模式（不缩放）
+    var vendor: String
+    var category: String
+    var notes: String
 
-    init(id: String = UUID().uuidString, name: String, standardAmount: Double, unit: String, isFormula: Bool = true) {
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case standardAmount
+        case unit
+        case isFormula
+        case vendor
+        case category
+        case notes
+    }
+
+    init(
+        id: String = UUID().uuidString,
+        name: String,
+        standardAmount: Double,
+        unit: String,
+        isFormula: Bool = true,
+        vendor: String = "",
+        category: String = "",
+        notes: String = ""
+    ) {
         self.id = id
         self.name = name
         self.standardAmount = standardAmount
         self.unit = unit
         self.isFormula = isFormula
+        self.vendor = vendor
+        self.category = category
+        self.notes = notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        standardAmount = try container.decode(Double.self, forKey: .standardAmount)
+        unit = try container.decode(String.self, forKey: .unit)
+        isFormula = try container.decodeIfPresent(Bool.self, forKey: .isFormula) ?? true
+        vendor = try container.decodeIfPresent(String.self, forKey: .vendor) ?? ""
+        category = try container.decodeIfPresent(String.self, forKey: .category) ?? ""
+        notes = try container.decodeIfPresent(String.self, forKey: .notes) ?? ""
     }
 
     func scaled(by factor: Double) -> String {

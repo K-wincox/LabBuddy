@@ -1,9 +1,41 @@
 import SwiftUI
 
+func runMatchesProject(_ run: LabRun, projectFilter: String, projects: [Project]) -> Bool {
+    guard let projectID = run.projectID else { return false }
+    if projectID == projectFilter { return true }
+    guard let project = projects.first(where: { $0.id == projectFilter }) else { return false }
+    return projectID == project.name
+}
+
+private struct ProjectCalendarDot: Identifiable {
+    let projectID: String
+    let color: Color
+
+    var id: String { projectID }
+}
+
+private func projectForRun(_ run: LabRun, projects: [Project]) -> Project? {
+    guard let projectID = run.projectID else { return nil }
+    return projects.first { $0.id == projectID || $0.name == projectID }
+}
+
+private func projectDots(for runs: [LabRun], projects: [Project]) -> [ProjectCalendarDot] {
+    var seen = Set<String>()
+    var dots: [ProjectCalendarDot] = []
+    for run in runs {
+        guard let project = projectForRun(run, projects: projects),
+              !seen.contains(project.id) else { continue }
+        seen.insert(project.id)
+        dots.append(ProjectCalendarDot(projectID: project.id, color: Color(hex: project.colorHex)))
+    }
+    return dots
+}
+
 struct ExperimentCalendarView: View {
     let days: [ExperimentDayRecord]
     @Binding var selectedDayID: String
     var projects: [Project] = []
+    var projectFilter: String? = nil
 
     @State private var displayMonth: Date = {
         Calendar(identifier: .gregorian).startOfDay(for: Date())
@@ -19,6 +51,22 @@ struct ExperimentCalendarView: View {
 
     private var recordIndex: [String: ExperimentDayRecord] {
         Dictionary(uniqueKeysWithValues: days.map { ($0.id, $0) })
+    }
+
+    private var selectableDays: [ExperimentDayRecord] {
+        guard let projectFilter else { return days }
+        return days.filter { day in
+            projectDots(for: day.runs, projects: projects).contains { $0.projectID == projectFilter }
+        }
+    }
+
+    private var selectableRecordIndex: [String: ExperimentDayRecord] {
+        Dictionary(uniqueKeysWithValues: selectableDays.map { ($0.id, $0) })
+    }
+
+    private var selectedProject: Project? {
+        guard let projectFilter else { return nil }
+        return projects.first { $0.id == projectFilter }
     }
 
     // All days in the displayed month (padded to start on Monday)
@@ -45,6 +93,16 @@ struct ExperimentCalendarView: View {
         return fmt.string(from: displayMonth)
     }
 
+    private func monthStart(_ date: Date) -> Date {
+        let comps = cal.dateComponents([.year, .month], from: date)
+        return cal.date(from: comps) ?? cal.startOfDay(for: date)
+    }
+
+    private func monthByAdding(_ value: Int) -> Date {
+        let start = monthStart(displayMonth)
+        return cal.date(byAdding: .month, value: value, to: start) ?? displayMonth
+    }
+
     private func dayKey(_ date: Date) -> String {
         let fmt = DateFormatter()
         fmt.locale = Locale(identifier: "zh_CN")
@@ -66,7 +124,7 @@ struct ExperimentCalendarView: View {
             // Month navigation header
             HStack {
                 Button {
-                    displayMonth = cal.date(byAdding: .month, value: -1, to: displayMonth) ?? displayMonth
+                    displayMonth = monthByAdding(-1)
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.title3.weight(.semibold))
@@ -83,14 +141,14 @@ struct ExperimentCalendarView: View {
                 Spacer()
 
                 Button {
-                    let next = cal.date(byAdding: .month, value: 1, to: displayMonth) ?? displayMonth
+                    let next = monthByAdding(1)
                     // don't navigate past current month
-                    if cal.startOfDay(for: next) <= cal.startOfDay(for: Date()) {
+                    if monthStart(next) <= monthStart(Date()) {
                         displayMonth = next
                     }
                 } label: {
-                    let next = cal.date(byAdding: .month, value: 1, to: displayMonth) ?? displayMonth
-                    let canForward = cal.startOfDay(for: next) <= cal.startOfDay(for: Date())
+                    let next = monthByAdding(1)
+                    let canForward = monthStart(next) <= monthStart(Date())
                     Image(systemName: "chevron.right")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(canForward ? .teal : .secondary.opacity(0.3))
@@ -98,8 +156,8 @@ struct ExperimentCalendarView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled({
-                    let next = cal.date(byAdding: .month, value: 1, to: displayMonth) ?? displayMonth
-                    return cal.startOfDay(for: next) > cal.startOfDay(for: Date())
+                    let next = monthByAdding(1)
+                    return monthStart(next) > monthStart(Date())
                 }())
             }
 
@@ -119,14 +177,19 @@ struct ExperimentCalendarView: View {
                         CalendarGridCell(
                             date: date,
                             record: recordIndex[dayKey(date)],
+                            selectableRecord: selectableRecordIndex[dayKey(date)],
                             isSelected: selectedDayID == dayKey(date),
                             isToday: isToday(date),
                             isFuture: isFuture(date),
                             cellScale: cellScale,
-                            projects: projects
+                            projects: projects,
+                            projectFilter: projectFilter,
+                            selectedProject: selectedProject
                         ) {
                             let key = dayKey(date)
-                            if recordIndex[key] != nil {
+                            if selectableRecordIndex[key] != nil,
+                               let record = recordIndex[key],
+                               dayContainsSelectedProjectDot(record) {
                                 selectedDayID = key
                             }
                         }
@@ -157,18 +220,30 @@ struct ExperimentCalendarView: View {
         )
         // Jump to the month that contains the selected record when view appears
         .onAppear {
-            if let day = days.first(where: { $0.id == selectedDayID }) ?? days.first {
-                selectedDayID = day.id
-                // parse the date from id "past-yyyy-MM-dd"
-                let raw = String(day.id.dropFirst("past-".count))
-                let fmt = DateFormatter()
-                fmt.locale = Locale(identifier: "zh_CN")
-                fmt.dateFormat = "yyyy-MM-dd"
-                if let date = fmt.date(from: raw) {
-                    displayMonth = date
-                }
-            }
+            syncSelectionToFilter()
         }
+        .onChange(of: projectFilter) { _, _ in
+            syncSelectionToFilter()
+        }
+    }
+
+    private func syncSelectionToFilter() {
+        let nextDay = selectableDays.first { $0.id == selectedDayID } ?? selectableDays.first ?? days.first
+        guard let nextDay else { return }
+        selectedDayID = nextDay.id
+
+        let raw = String(nextDay.id.dropFirst("past-".count))
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.dateFormat = "yyyy-MM-dd"
+        if let date = fmt.date(from: raw) {
+            displayMonth = date
+        }
+    }
+
+    private func dayContainsSelectedProjectDot(_ day: ExperimentDayRecord) -> Bool {
+        guard let projectFilter else { return !day.runs.isEmpty }
+        return projectDots(for: day.runs, projects: projects).contains { $0.projectID == projectFilter }
     }
 }
 
@@ -177,11 +252,14 @@ private let baseCellHeight: CGFloat = 44
 private struct CalendarGridCell: View {
     let date: Date
     let record: ExperimentDayRecord?
+    let selectableRecord: ExperimentDayRecord?
     let isSelected: Bool
     let isToday: Bool
     let isFuture: Bool
     let cellScale: CGFloat
     var projects: [Project] = []
+    var projectFilter: String? = nil
+    var selectedProject: Project? = nil
     let onTap: () -> Void
 
     private var dayNumber: String {
@@ -190,20 +268,46 @@ private struct CalendarGridCell: View {
     }
 
     private var hasRecord: Bool { record != nil }
+    private var isSelectable: Bool { selectableRecord != nil }
+    private var activeColor: Color {
+        if let selectedProject {
+            return Color(hex: selectedProject.colorHex)
+        }
+        return .teal
+    }
+    private var inactiveRecordOpacity: Double {
+        projectFilter == nil ? 0.35 : 0.16
+    }
 
     // Project-color dots for experiments on this day
     private var dotColors: [Color] {
-        guard let runs = record?.runs else { return [] }
-        let projectIDs = Array(Set(runs.compactMap(\.projectID)))
-        return projectIDs.prefix(3).compactMap { pid in
-            guard let hex = projects.first(where: { $0.id == pid })?.colorHex else { return nil }
-            return Color(hex: hex)
+        visibleProjectDots.prefix(3).map(\.color)
+    }
+
+    private var allProjectDots: [ProjectCalendarDot] {
+        projectDots(for: record?.runs ?? [], projects: projects)
+    }
+
+    private var visibleProjectDots: [ProjectCalendarDot] {
+        if let projectFilter {
+            return allProjectDots.filter { $0.projectID == projectFilter }
+        } else {
+            return allProjectDots
         }
+    }
+
+    private var containsSelectedProjectDot: Bool {
+        guard let projectFilter else { return hasRecord }
+        return allProjectDots.contains { $0.projectID == projectFilter }
+    }
+
+    private var shouldLightDate: Bool {
+        isSelectable && containsSelectedProjectDot
     }
 
     var body: some View {
         let cellH = baseCellHeight * cellScale
-        let isDisabled = isFuture || !hasRecord
+        let isDisabled = isFuture || !shouldLightDate
 
         Button(action: onTap) {
             VStack(spacing: 2) {
@@ -212,23 +316,29 @@ private struct CalendarGridCell: View {
                     .foregroundStyle(
                         isSelected ? .white :
                         isFuture ? Color.secondary.opacity(0.25) :
-                        isToday ? .teal :
-                        hasRecord ? .primary : Color.secondary.opacity(0.35)
+                        isToday ? activeColor :
+                        shouldLightDate ? activeColor :
+                        hasRecord ? Color.secondary.opacity(inactiveRecordOpacity) : Color.secondary.opacity(0.25)
                     )
 
-                if cellScale > 0.75 && hasRecord {
+                if cellScale > 0.75 && shouldLightDate {
                     HStack(spacing: 2) {
                         ForEach(Array(dotColors.enumerated()), id: \.offset) { _, color in
                             Circle()
                                 .fill(isSelected ? Color.white.opacity(0.9) : color)
                                 .frame(width: 4, height: 4)
                         }
+                        if dotColors.isEmpty {
+                            Circle()
+                                .fill(isSelected ? Color.white.opacity(0.9) : activeColor)
+                                .frame(width: 4, height: 4)
+                        }
                     }
                 } else {
                     // minimal: just a thin tint line for days with records
-                    if hasRecord && !isSelected {
+                    if shouldLightDate && !isSelected {
                         Capsule()
-                            .fill(Color.teal.opacity(0.5))
+                            .fill(activeColor.opacity(0.5))
                             .frame(width: 16, height: 2)
                     } else {
                         Color.clear.frame(height: 2)
@@ -238,10 +348,16 @@ private struct CalendarGridCell: View {
             .frame(maxWidth: .infinity)
             .frame(height: cellH)
             .background(
-                isSelected ? Color.teal :
-                isToday && !isSelected ? Color.teal.opacity(0.1) :
+                isSelected ? activeColor :
+                isToday && !isSelected ? activeColor.opacity(0.10) :
+                shouldLightDate ? activeColor.opacity(0.08) :
+                hasRecord && projectFilter == nil ? Color.teal.opacity(0.04) :
                 Color.clear,
                 in: RoundedRectangle(cornerRadius: 6)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(shouldLightDate && !isSelected ? activeColor.opacity(0.18) : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -253,51 +369,196 @@ struct ExperimentDayDetailView: View {
     let day: ExperimentDayRecord
     let completedStepIDs: Set<String>
     var projects: [Project] = []
+    var projectFilter: String? = nil
+    @State private var selectedRun: LabRun?
+
+    private var filteredRuns: [LabRun] {
+        guard let projectFilter else { return day.runs }
+        return day.runs.filter { runMatchesProject($0, projectFilter: projectFilter, projects: projects) }
+    }
+
+    private var selectedProject: Project? {
+        guard let projectFilter else { return nil }
+        return projects.first { $0.id == projectFilter }
+    }
+
+    private var headerTitle: String {
+        if let selectedProject {
+            return "\(day.dateLabel) · \(selectedProject.name)"
+        }
+        return day.dateLabel
+    }
+
+    private var headerSummary: String {
+        if let selectedProject {
+            return "\(selectedProject.name) · \(filteredRuns.count) 个实验"
+        }
+        return day.summary
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(day.dateLabel).font(.title3.bold())
-                    Text(day.summary).font(.caption).foregroundStyle(.secondary)
+                    Text(headerTitle).font(.title3.bold())
+                    Text(headerSummary).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Text(day.weekday).font(.caption.monospacedDigit().weight(.semibold)).foregroundStyle(.secondary)
             }
 
-            if day.runs.isEmpty {
+            if filteredRuns.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Image(systemName: "calendar.badge.plus").font(.title2).foregroundStyle(.teal)
-                    Text("这一天还没有实验记录").font(.headline)
-                    Text("超过今天后，完成或计划的实验会进入这里。").font(.subheadline).foregroundStyle(.secondary)
+                    Text(projectFilter == nil ? "这一天还没有实验记录" : "这一天没有该项目实验").font(.headline)
+                    Text(projectFilter == nil ? "超过今天后，完成或计划的实验会进入这里。" : "切换到「全部」可查看当天其他项目。").font(.subheadline).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
                 .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
             } else {
                 VStack(spacing: 8) {
-                    ForEach(day.runs) { run in
-                        HStack(spacing: 10) {
-                            Text(run.timeLabel)
-                                .font(.caption.monospacedDigit().weight(.semibold))
-                                .frame(width: 48, alignment: .leading)
-                                .foregroundStyle(.secondary)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(run.title).font(.subheadline.weight(.semibold))
-                                Text("\(run.area.rawValue) · \(run.steps.filter { completedStepIDs.contains($0.id) }.count)/\(run.steps.count) 步")
-                                    .font(.caption).foregroundStyle(.secondary)
+                    ForEach(filteredRuns) { run in
+                        Button {
+                            selectedRun = run
+                        } label: {
+                            HStack(spacing: 10) {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(projectColor(for: run))
+                                    .frame(width: 4)
+                                Text(run.timeLabel)
+                                    .font(.caption.monospacedDigit().weight(.semibold))
+                                    .frame(width: 48, alignment: .leading)
+                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(run.title).font(.subheadline.weight(.semibold))
+                                    Text("\(run.area.rawValue) · \(run.steps.filter { completedStepIDs.contains($0.id) }.count)/\(run.steps.count) 步")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
                             }
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+                            .padding(10)
+                            .background(projectColor(for: run).opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(projectColor(for: run).opacity(0.18), lineWidth: 1)
+                            )
                         }
-                        .padding(10)
-                        .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+                        .buttonStyle(.plain)
                     }
                 }
             }
         }
         .padding(16)
         .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+        .sheet(item: $selectedRun) { run in
+            PastRunDetailSheet(run: run, completedStepIDs: completedStepIDs, project: project(for: run))
+        }
+    }
+
+    private func project(for run: LabRun) -> Project? {
+        projectForRun(run, projects: projects)
+    }
+
+    private func projectColor(for run: LabRun) -> Color {
+        guard let hex = project(for: run)?.colorHex else { return .teal }
+        return Color(hex: hex)
+    }
+}
+
+private struct PastRunDetailSheet: View {
+    let run: LabRun
+    let completedStepIDs: Set<String>
+    let project: Project?
+    @Environment(\.dismiss) private var dismiss
+    @State private var showDataCard = false
+
+    private var projectColor: Color {
+        if let hex = project?.colorHex { return Color(hex: hex) }
+        return .teal
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .top) {
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(projectColor)
+                                .frame(width: 5, height: 56)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(run.title)
+                                    .font(.title2.bold())
+                                Text("\(run.area.rawValue) · \(run.timeLabel)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                if let project {
+                                    Text(project.name)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(projectColor)
+                                }
+                            }
+                            Spacer()
+                        }
+                        Text(run.scaledVolumeLabel)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(16)
+                    .background(projectColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("实验步骤")
+                            .font(.headline)
+                        ForEach(Array(run.steps.enumerated()), id: \.element.id) { index, step in
+                            HStack(alignment: .top, spacing: 10) {
+                                Text("\(index + 1)")
+                                    .font(.subheadline.monospacedDigit().weight(.bold))
+                                    .foregroundStyle(projectColor)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(step.title)
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(step.detail)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    if let minutes = step.durationMinutes {
+                                        Text("\(minutes) min")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(projectColor)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(10)
+                            .background(Color.labInset, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                    .padding(16)
+                    .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .padding(18)
+            }
+            .background(Color.labBackground)
+            .navigationTitle("实验记录")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        showDataCard = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+            }
+            .sheet(isPresented: $showDataCard) {
+                DataCardSheet(run: run, completedStepIDs: completedStepIDs)
+            }
+        }
     }
 }
 
@@ -321,7 +582,7 @@ struct ProjectDaysListView: View {
 
     private var matchingDays: [(day: ExperimentDayRecord, runs: [LabRun])] {
         days.compactMap { day in
-            let matching = day.runs.filter { $0.projectID == projectFilter }
+            let matching = day.runs.filter { runMatchesProject($0, projectFilter: projectFilter, projects: projects) }
             guard !matching.isEmpty else { return nil }
             return (day, matching)
         }

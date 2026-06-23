@@ -87,22 +87,15 @@ struct TodayView: View {
                         ExperimentCalendarView(
                             days: historyDays,
                             selectedDayID: $selectedRecordDayID,
-                            projects: projects
+                            projects: projects,
+                            projectFilter: selectedProjectFilter
                         )
-                        if let filter = selectedProjectFilter {
-                            ProjectDaysListView(
-                                days: historyDays,
-                                projectFilter: filter,
-                                projects: projects,
-                                completedStepIDs: completedStepIDs
-                            )
-                        } else {
-                            ExperimentDayDetailView(
-                                day: selectedRecordDay,
-                                completedStepIDs: completedStepIDs,
-                                projects: projects
-                            )
-                        }
+                        ExperimentDayDetailView(
+                            day: selectedRecordDay,
+                            completedStepIDs: completedStepIDs,
+                            projects: projects,
+                            projectFilter: selectedProjectFilter
+                        )
 
                     case .today:
                         if !activeTimers.isEmpty {
@@ -149,10 +142,8 @@ struct TodayView: View {
                                 showDataCard: { selectedDataCardRun = $0 },
                                 openBenchMode: { focusedRun = $0 },
                                 removeRun: { run in
-                                    if run.id.hasPrefix("import-") {
-                                        importedRuns.removeAll { $0.id == run.id }
-                                        hapticFeedback(.medium)
-                                    }
+                                    importedRuns.removeAll { $0.id == run.id }
+                                    hapticFeedback(.medium)
                                 },
                                 onUpdateRun: { updatedRun in
                                     if let index = importedRuns.firstIndex(where: { $0.id == updatedRun.id }) {
@@ -283,6 +274,22 @@ struct TodayView: View {
                 Text("今天所有实验（含未完成）将归档到「过去」，明天的计划移入今天。")
             }
             .onAppear(perform: loadTimers)
+            .onChange(of: selectedMode) { _, mode in
+                if mode == .past {
+                    selectedProjectFilter = nil
+                    ensurePastSelection()
+                }
+            }
+            .onChange(of: selectedProjectFilter) { _, _ in
+                if selectedMode == .past {
+                    ensurePastSelection()
+                }
+            }
+            .onChange(of: pastDays) { _, _ in
+                if selectedMode == .past {
+                    ensurePastSelection()
+                }
+            }
             .onChange(of: activeTimers) { _, newTimers in
                 saveTimers(newTimers)
                 checkForFinishedTimers(newTimers)
@@ -342,6 +349,22 @@ struct TodayView: View {
         activeTimers.removeAll { $0.runID == run.id }
         focusedRun = nil
         hapticNotification(.success)
+    }
+
+    private func ensurePastSelection() {
+        let visibleDays: [ExperimentDayRecord]
+        if let selectedProjectFilter {
+            visibleDays = historyDays.filter { day in
+                day.runs.contains { runMatchesProject($0, projectFilter: selectedProjectFilter, projects: projects) }
+            }
+        } else {
+            visibleDays = historyDays
+        }
+
+        if visibleDays.contains(where: { $0.id == selectedRecordDayID }) {
+            return
+        }
+        selectedRecordDayID = visibleDays.first?.id ?? historyDays.first?.id ?? ""
     }
 
     // MARK: - Haptic Feedback

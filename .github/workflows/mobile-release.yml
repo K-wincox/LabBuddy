@@ -1,0 +1,96 @@
+name: Mobile Release
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-mobile-release:
+    name: Build Android and iOS Assets
+    runs-on: macos-15
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore Android release signing key
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+        shell: bash
+        run: |
+          mkdir -p android/release android/android
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/release/labbuddy-release.jks
+          cat > android/android/key.properties <<PROPS
+          storePassword=$ANDROID_STORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=../../release/labbuddy-release.jks
+          PROPS
+
+      - name: Build Android APK
+        working-directory: android
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test test/widget_test.dart
+          flutter build apk --release
+          mkdir -p build/release-artifacts
+          cp build/app/outputs/flutter-apk/app-release.apk build/release-artifacts/LabBuddy-${GITHUB_REF_NAME:-manual}-android.apk
+          shasum -a 256 build/release-artifacts/LabBuddy-${GITHUB_REF_NAME:-manual}-android.apk > build/release-artifacts/LabBuddy-${GITHUB_REF_NAME:-manual}-android.apk.sha256
+
+      - name: Build and package iOS prototype
+        run: |
+          ./scripts/check-ios-local.sh
+          ./scripts/package-ios-prototype.sh
+          mkdir -p dist/release-artifacts
+          cp dist/LabBuddy-iOS-prototype-latest.zip dist/release-artifacts/LabBuddy-${GITHUB_REF_NAME:-manual}-ios-prototype.zip
+          shasum -a 256 dist/release-artifacts/LabBuddy-${GITHUB_REF_NAME:-manual}-ios-prototype.zip > dist/release-artifacts/LabBuddy-${GITHUB_REF_NAME:-manual}-ios-prototype.zip.sha256
+
+      - name: Upload mobile artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: LabBuddy-Mobile-Release
+          path: |
+            android/build/release-artifacts/*.apk
+            android/build/release-artifacts/*.sha256
+            dist/release-artifacts/*.zip
+            dist/release-artifacts/*.sha256
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            android/build/release-artifacts/*.apk
+            android/build/release-artifacts/*.sha256
+            dist/release-artifacts/*.zip
+            dist/release-artifacts/*.sha256
+          body: |
+            LabBuddy mobile release.
+
+            Android:
+            - Download `LabBuddy-${{ github.ref_name }}-android.apk` and install it after allowing installs from unknown sources.
+            - Demo login: `demo@labbuddy.app` / `labbuddy2026`
+            - Runs in local demo mode; no server login is required.
+
+            iOS:
+            - Download `LabBuddy-${{ github.ref_name }}-ios-prototype.zip`.
+            - Open `LabBuddy.xcodeproj` or double-click `Open-LabBuddy.command` on a Mac with Xcode.
+            - This is an Xcode/iOS Simulator source package, not a universal installable iPhone `.ipa`.
+            - Direct iPhone installation requires Apple signing/provisioning or TestFlight/App Store distribution.

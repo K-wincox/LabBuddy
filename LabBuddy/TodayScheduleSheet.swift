@@ -36,13 +36,14 @@ struct AddExperimentSheet: View {
     @State private var editingTime = false
     @State private var selectedHour = 9
     @State private var selectedMinute = 0
+    @State private var draftTimeLabel = ""
 
     private var selectedProtocol: LabProtocol {
         SampleData.protocols.first { $0.id == selectedProtocolID } ?? SampleData.protocols[0]
     }
 
     private var destinationTitle: String {
-        let timeStr = editingTime ? String(format: "%02d:%02d", selectedHour, selectedMinute) : request.timeLabel
+        let timeStr = draftTimeLabel.isEmpty ? request.timeLabel : draftTimeLabel
         return request.targetDay == .today ? "今天 \(timeStr)" : "明天 \(timeStr)"
     }
 
@@ -61,14 +62,6 @@ struct AddExperimentSheet: View {
                 Section("插入位置") {
                     Button {
                         editingTime.toggle()
-                        if editingTime {
-                            // Parse current time
-                            let parts = request.timeLabel.split(separator: ":")
-                            if parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) {
-                                selectedHour = h
-                                selectedMinute = m
-                            }
-                        }
                     } label: {
                         HStack {
                             Label(destinationTitle, systemImage: "calendar.badge.plus")
@@ -90,6 +83,9 @@ struct AddExperimentSheet: View {
                             }
                             .pickerStyle(.wheel)
                             .frame(width: 80)
+                            .onChange(of: selectedHour) { _, _ in
+                                draftTimeLabel = String(format: "%02d:%02d", selectedHour, selectedMinute)
+                            }
 
                             Text(":").font(.title2.bold())
 
@@ -100,6 +96,9 @@ struct AddExperimentSheet: View {
                             }
                             .pickerStyle(.wheel)
                             .frame(width: 80)
+                            .onChange(of: selectedMinute) { _, _ in
+                                draftTimeLabel = String(format: "%02d:%02d", selectedHour, selectedMinute)
+                            }
                         }
                         .frame(maxWidth: .infinity)
                     }
@@ -196,6 +195,14 @@ struct AddExperimentSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
             }
             .onAppear {
+                if draftTimeLabel.isEmpty {
+                    draftTimeLabel = request.timeLabel
+                    let parts = request.timeLabel.split(separator: ":")
+                    if parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) {
+                        selectedHour = h
+                        selectedMinute = m
+                    }
+                }
                 if experimentName.isEmpty {
                     experimentName = selectedProtocol.name
                 }
@@ -205,7 +212,7 @@ struct AddExperimentSheet: View {
 
     private func buildRun() -> LabRun {
         let ts = Int(Date().timeIntervalSince1970)
-        let finalTimeLabel = editingTime ? String(format: "%02d:%02d", selectedHour, selectedMinute) : request.timeLabel
+        let finalTimeLabel = draftTimeLabel.isEmpty ? request.timeLabel : draftTimeLabel
 
         switch path {
         case .importProtocol:
