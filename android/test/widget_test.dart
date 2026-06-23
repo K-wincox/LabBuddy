@@ -1498,9 +1498,16 @@ void main() {
       id: 'tomorrow-rollover',
       status: '明日计划',
       timeLabel: '09:00',
+      planDateKey: _testDayKey(DateTime.now().add(const Duration(days: 1))),
+    );
+    final laterFuture = sampleRuns[1].copyWith(
+      id: 'later-future-rollover',
+      status: '未来计划',
+      timeLabel: '15:00',
+      planDateKey: _testDayKey(DateTime.now().add(const Duration(days: 2))),
     );
     store.todayRuns = [today];
-    store.tomorrowRuns = [tomorrow];
+    store.tomorrowRuns = [tomorrow, laterFuture];
     store.pastRuns = [];
     store.timers = [
       LabTimer(
@@ -1521,7 +1528,8 @@ void main() {
     expect(store.pastRuns.single.status, '进行中');
     expect(store.todayRuns.single.id, tomorrow.id);
     expect(store.todayRuns.single.status, '已排期');
-    expect(store.tomorrowRuns, isEmpty);
+    expect(store.todayRuns.single.planDateKey, isNull);
+    expect(store.tomorrowRuns.single.id, laterFuture.id);
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
@@ -3178,6 +3186,44 @@ void main() {
     expect(selectedKey, matchingKey);
   });
 
+  testWidgets('Tomorrow tab uses calendar planning for future dates', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LabStore();
+    store.protocols = [sampleProtocols.first];
+    store.todayRuns = [];
+    store.tomorrowRuns = [];
+    store.projects = [];
+
+    final futureDate = DateTime.now().add(const Duration(days: 3));
+    await store.addRun(
+      target: DayMode.tomorrow,
+      title: 'Future Plan',
+      area: sampleProtocols.first.area,
+      timeLabel: '09:30',
+      protocol: sampleProtocols.first,
+      scale: sampleProtocols.first.baseVolumeLabel,
+      projectId: null,
+      date: futureDate,
+    );
+
+    expect(store.futureRunsForDate(futureDate).single.title, 'Future Plan');
+    expect(
+      store.futureRunsForDate(DateTime.now().add(const Duration(days: 1))),
+      isEmpty,
+    );
+
+    await tester.pumpWidget(MaterialApp(home: TodayScreen(store: store)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('明天'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择未来日期，提前安排实验计划'), findsOneWidget);
+    expect(find.byType(PastCalendarCard), findsOneWidget);
+  });
+
   testWidgets('Past run opens iOS-style record detail before Data Card', (
     WidgetTester tester,
   ) async {
@@ -4035,6 +4081,33 @@ void main() {
     expect(find.text(sampleProtocols.first.name), findsWidgets);
   });
 
+  testWidgets('Protocol library explicit delete removes protocol and indexes', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LabStore();
+    final protocol = sampleProtocols.first;
+    store.protocols = [protocol];
+    store.favoriteProtocolIds = [protocol.id];
+    store.recentProtocolIds = [protocol.id];
+
+    await tester.pumpWidget(MaterialApp(home: ProtocolScreen(store: store)));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('删除 Protocol'), findsOneWidget);
+    await tester.tap(find.byTooltip('删除 Protocol'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除 Protocol？'), findsOneWidget);
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(store.protocols, isEmpty);
+    expect(store.favoriteProtocolIds, isEmpty);
+    expect(store.recentProtocolIds, isEmpty);
+    expect(find.text(protocol.name), findsNothing);
+  });
+
   testWidgets('Protocol cards use area-tinted iOS-style sections', (
     WidgetTester tester,
   ) async {
@@ -4049,6 +4122,7 @@ void main() {
             onFavorite: () {},
             onOpen: () {},
             onEdit: () {},
+            onDelete: () async {},
             onCreateRun: () {},
           ),
         ),
@@ -4099,3 +4173,6 @@ void main() {
 }
 
 Color _testAlpha(Color color, double alpha) => color.withValues(alpha: alpha);
+
+String _testDayKey(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';

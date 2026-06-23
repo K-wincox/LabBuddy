@@ -1891,13 +1891,16 @@ class TodayScreen extends StatefulWidget {
 class _TodayScreenState extends State<TodayScreen> {
   DayMode mode = DayMode.today;
   String? selectedProjectId;
+  late DateTime selectedFutureDate = DateTime.now().add(
+    const Duration(days: 1),
+  );
 
   @override
   Widget build(BuildContext context) {
     final allRuns = switch (mode) {
       DayMode.past => widget.store.pastRuns,
       DayMode.today => widget.store.todayRuns,
-      DayMode.tomorrow => widget.store.tomorrowRuns,
+      DayMode.tomorrow => widget.store.futureRunsForDate(selectedFutureDate),
     };
     final projectOptions = widget.store.projects;
     if (selectedProjectId != null &&
@@ -1937,6 +1940,37 @@ class _TodayScreenState extends State<TodayScreen> {
                       projects: widget.store.projects,
                       selectedProjectId: selectedProjectId,
                       showDataCard: (run) => _showDataCard(context, run),
+                    )
+                  : mode == DayMode.tomorrow
+                  ? FuturePlanCalendarView(
+                      runs: allRuns,
+                      allFutureRuns: widget.store.tomorrowRuns,
+                      store: widget.store,
+                      projects: widget.store.projects,
+                      selectedDate: selectedFutureDate,
+                      selectedProjectId: selectedProjectId,
+                      onDateSelected: (date) =>
+                          setState(() => selectedFutureDate = _dayStart(date)),
+                      addRun: () => _showRunEditor(
+                        context,
+                        DayMode.tomorrow,
+                        date: selectedFutureDate,
+                      ),
+                      openBench: (run) => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => BenchModeScreen(
+                            store: widget.store,
+                            run: run,
+                            readonly: false,
+                          ),
+                        ),
+                      ),
+                      showDataCard: (run) => _showDataCard(context, run),
+                      deleteRun: (run) => widget.store.deleteRun(
+                        run.id,
+                        DayMode.tomorrow,
+                        date: selectedFutureDate,
+                      ),
                     )
                   : runs.isEmpty
                   ? TodayEmptyState(
@@ -1995,11 +2029,16 @@ class _TodayScreenState extends State<TodayScreen> {
     }
   }
 
-  Future<void> _showRunEditor(BuildContext context, DayMode target) async {
+  Future<void> _showRunEditor(
+    BuildContext context,
+    DayMode target, {
+    DateTime? date,
+  }) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => RunEditorSheet(store: widget.store, target: target),
+      builder: (context) =>
+          RunEditorSheet(store: widget.store, target: target, date: date),
     );
   }
 
@@ -2266,6 +2305,142 @@ class PastRecordsCalendarView extends StatefulWidget {
       _PastRecordsCalendarViewState();
 }
 
+class FuturePlanCalendarView extends StatefulWidget {
+  const FuturePlanCalendarView({
+    super.key,
+    required this.runs,
+    required this.allFutureRuns,
+    required this.store,
+    required this.projects,
+    required this.selectedDate,
+    required this.selectedProjectId,
+    required this.onDateSelected,
+    required this.addRun,
+    required this.openBench,
+    required this.showDataCard,
+    required this.deleteRun,
+  });
+
+  final List<LabRun> runs;
+  final List<LabRun> allFutureRuns;
+  final LabStore store;
+  final List<LabProject> projects;
+  final DateTime selectedDate;
+  final String? selectedProjectId;
+  final ValueChanged<DateTime> onDateSelected;
+  final VoidCallback addRun;
+  final ValueChanged<LabRun> openBench;
+  final ValueChanged<LabRun> showDataCard;
+  final ValueChanged<LabRun> deleteRun;
+
+  @override
+  State<FuturePlanCalendarView> createState() => _FuturePlanCalendarViewState();
+}
+
+class _FuturePlanCalendarViewState extends State<FuturePlanCalendarView> {
+  late DateTime displayMonth = _monthStart(widget.selectedDate);
+
+  List<PastDayRecord> _recordsWhere(bool Function(LabRun run) include) {
+    final buckets = <String, List<LabRun>>{};
+    for (final run in widget.allFutureRuns) {
+      if (!include(run)) continue;
+      final key =
+          run.planDateKey ??
+          _dayKey(DateTime.now().add(const Duration(days: 1)));
+      buckets.putIfAbsent(key, () => []).add(run);
+    }
+    return buckets.entries
+        .map((entry) => PastDayRecord.fromRuns(entry.key, entry.value))
+        .toList();
+  }
+
+  Map<String, PastDayRecord> get recordIndex => {
+    for (final record in _recordsWhere((_) => true)) record.key: record,
+  };
+
+  Map<String, PastDayRecord> get selectableRecordIndex {
+    final selectedProjectId = widget.selectedProjectId;
+    if (selectedProjectId == null) return recordIndex;
+    return {
+      for (final record in _recordsWhere(
+        (run) => _runMatchesProject(run, selectedProjectId, widget.projects),
+      ))
+        record.key: record,
+    };
+  }
+
+  @override
+  void didUpdateWidget(covariant FuturePlanCalendarView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isSameDay(oldWidget.selectedDate, widget.selectedDate)) {
+      displayMonth = _monthStart(widget.selectedDate);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedRuns = widget.selectedProjectId == null
+        ? widget.runs
+        : widget.runs
+              .where(
+                (run) => _runMatchesProject(
+                  run,
+                  widget.selectedProjectId!,
+                  widget.projects,
+                ),
+              )
+              .toList();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scheduleHeight = selectedRuns.isEmpty
+            ? math.max(260.0, constraints.maxHeight * 0.42)
+            : math.max(520.0, constraints.maxHeight * 0.72);
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 104),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: PastCalendarCard(
+                displayMonth: displayMonth,
+                records: recordIndex,
+                selectableRecords: selectableRecordIndex,
+                selectedDayKey: _dayKey(widget.selectedDate),
+                projects: widget.projects,
+                selectedProjectId: widget.selectedProjectId,
+                allowFutureMonths: true,
+                allowEmptySelection: true,
+                firstSelectableDate: _dayStart(DateTime.now()),
+                footerText: '选择未来日期，提前安排实验计划',
+                onMonthChanged: (month) => setState(() => displayMonth = month),
+                onDaySelected: (key) =>
+                    widget.onDateSelected(_dateFromDayKey(key)),
+              ),
+            ),
+            SizedBox(
+              height: scheduleHeight,
+              child: selectedRuns.isEmpty
+                  ? TodayEmptyState(
+                      mode: DayMode.tomorrow,
+                      addRun: widget.addRun,
+                    )
+                  : LabTimelineView(
+                      runs: selectedRuns,
+                      store: widget.store,
+                      mode: DayMode.tomorrow,
+                      addRun: widget.addRun,
+                      endDay: null,
+                      openBench: widget.openBench,
+                      showDataCard: widget.showDataCard,
+                      deleteRun: widget.deleteRun,
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _PastRecordsCalendarViewState extends State<PastRecordsCalendarView> {
   late DateTime displayMonth = _monthStart(DateTime.now());
   String? selectedDayKey;
@@ -2385,6 +2560,10 @@ class PastCalendarCard extends StatefulWidget {
     required this.selectedProjectId,
     required this.onMonthChanged,
     required this.onDaySelected,
+    this.allowFutureMonths = false,
+    this.allowEmptySelection = false,
+    this.firstSelectableDate,
+    this.footerText = '双指缩放可调整大小',
   });
 
   final DateTime displayMonth;
@@ -2395,6 +2574,10 @@ class PastCalendarCard extends StatefulWidget {
   final String? selectedProjectId;
   final ValueChanged<DateTime> onMonthChanged;
   final ValueChanged<String> onDaySelected;
+  final bool allowFutureMonths;
+  final bool allowEmptySelection;
+  final DateTime? firstSelectableDate;
+  final String footerText;
 
   @override
   State<PastCalendarCard> createState() => _PastCalendarCardState();
@@ -2410,7 +2593,9 @@ class _PastCalendarCardState extends State<PastCalendarCard> {
     final nextMonth = _monthStart(
       DateTime(widget.displayMonth.year, widget.displayMonth.month + 1),
     );
-    final canForward = !nextMonth.isAfter(_monthStart(DateTime.now()));
+    final canForward =
+        widget.allowFutureMonths ||
+        !nextMonth.isAfter(_monthStart(DateTime.now()));
     return GestureDetector(
       onScaleUpdate: (details) {
         final next = (lastScale * details.scale).clamp(0.6, 1.6);
@@ -2487,6 +2672,15 @@ class _PastCalendarCardState extends State<PastCalendarCard> {
                   final day = monthDays[index];
                   if (day == null) return const SizedBox.shrink();
                   final key = _dayKey(day);
+                  final isBeforeFirst =
+                      widget.firstSelectableDate != null &&
+                      _dayStart(
+                        day,
+                      ).isBefore(_dayStart(widget.firstSelectableDate!));
+                  final canSelect =
+                      !isBeforeFirst &&
+                      (widget.allowEmptySelection ||
+                          widget.selectableRecords[key] != null);
                   return PastCalendarCell(
                     date: day,
                     record: widget.records[key],
@@ -2495,18 +2689,16 @@ class _PastCalendarCardState extends State<PastCalendarCard> {
                     projects: widget.projects,
                     selectedProjectId: widget.selectedProjectId,
                     cellScale: cellScale,
-                    onTap: widget.selectableRecords[key] == null
-                        ? null
-                        : () => widget.onDaySelected(key),
+                    onTap: canSelect ? () => widget.onDaySelected(key) : null,
                   );
                 },
               ),
               const SizedBox(height: 8),
-              const Align(
+              Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  '双指缩放可调整大小',
-                  style: TextStyle(
+                  widget.footerText,
+                  style: const TextStyle(
                     color: _muted,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -4108,8 +4300,19 @@ bool _runCoversHour(LabRun run, int hour) {
 
 DateTime _monthStart(DateTime date) => DateTime(date.year, date.month);
 
+DateTime _dayStart(DateTime date) => DateTime(date.year, date.month, date.day);
+
 String _dayKey(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+String _defaultTomorrowKey() =>
+    _dayKey(DateTime.now().add(const Duration(days: 1)));
+
+String _futureDateLabel(DateTime? date) {
+  final target = date ?? DateTime.now().add(const Duration(days: 1));
+  if (_dayKey(target) == _defaultTomorrowKey()) return '明天';
+  return '${target.month}月${target.day}日';
+}
 
 DateTime _dateFromDayKey(String key) {
   final parts = key.split('-').map(int.tryParse).toList();
@@ -6778,6 +6981,16 @@ class _ProtocolScreenState extends State<ProtocolScreen> {
                   if (mounted) setState(() {});
                 },
                 onEdit: () => _showProtocolEditor(context, existing: protocol),
+                onDelete: () async {
+                  final ok = await _confirmDelete(
+                    context,
+                    title: '删除 Protocol？',
+                    message: '删除「${protocol.name}」后，不会影响已经创建的实验记录。',
+                  );
+                  if (!ok) return;
+                  await widget.store.deleteProtocol(protocol.id);
+                  if (mounted) setState(() {});
+                },
                 onCreateRun: () async {
                   await widget.store.markProtocolRecent(protocol.id);
                   if (!context.mounted) return;
@@ -7008,6 +7221,7 @@ class ProtocolLibraryTile extends StatelessWidget {
     required this.onFavorite,
     required this.onOpen,
     required this.onEdit,
+    required this.onDelete,
     required this.onCreateRun,
     this.reorderControls,
   });
@@ -7017,6 +7231,7 @@ class ProtocolLibraryTile extends StatelessWidget {
   final VoidCallback onFavorite;
   final VoidCallback onOpen;
   final VoidCallback onEdit;
+  final Future<void> Function() onDelete;
   final VoidCallback onCreateRun;
   final Widget? reorderControls;
 
@@ -7061,6 +7276,20 @@ class ProtocolLibraryTile extends StatelessWidget {
                               Icons.tune,
                               color: _teal,
                               size: 23,
+                            ),
+                          ),
+                        ),
+                        SizedBox.square(
+                          dimension: 34,
+                          child: IconButton(
+                            tooltip: '删除 Protocol',
+                            onPressed: onDelete,
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Color(0xFFFF3B30),
+                              size: 22,
                             ),
                           ),
                         ),
@@ -17121,11 +17350,13 @@ class RunEditorSheet extends StatefulWidget {
     required this.store,
     required this.target,
     this.presetProtocol,
+    this.date,
   });
 
   final LabStore store;
   final DayMode target;
   final LabProtocol? presetProtocol;
+  final DateTime? date;
 
   @override
   State<RunEditorSheet> createState() => _RunEditorSheetState();
@@ -17220,7 +17451,7 @@ class _RunEditorSheetState extends State<RunEditorSheet> {
                         Expanded(
                           child: Text(
                             widget.target == DayMode.tomorrow
-                                ? '明天 $_selectedTimeLabel'
+                                ? '${_futureDateLabel(widget.date)} $_selectedTimeLabel'
                                 : '今天 $_selectedTimeLabel',
                             style: const TextStyle(fontWeight: FontWeight.w900),
                           ),
@@ -17330,6 +17561,7 @@ class _RunEditorSheetState extends State<RunEditorSheet> {
           ? 'manual'
           : scaleController.text.trim(),
       projectId: projectId,
+      date: widget.date,
     );
     if (mounted) Navigator.pop(context);
   }
@@ -19074,6 +19306,7 @@ class LabStore extends ChangeNotifier {
     required LabProtocol? protocol,
     required String scale,
     required String? projectId,
+    DateTime? date,
   }) async {
     if (protocol != null) {
       await markProtocolRecent(protocol.id);
@@ -19094,6 +19327,9 @@ class LabStore extends ChangeNotifier {
       protocolName: protocol?.name ?? 'Manual experiment',
       scaledVolumeLabel: scale,
       projectId: projectId,
+      planDateKey: target == DayMode.tomorrow
+          ? _dayKey(date ?? DateTime.now().add(const Duration(days: 1)))
+          : null,
       steps: steps,
     );
     if (target == DayMode.tomorrow) {
@@ -19105,15 +19341,28 @@ class LabStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> deleteRun(String id, DayMode target) async {
+  Future<void> deleteRun(String id, DayMode target, {DateTime? date}) async {
     if (target == DayMode.tomorrow) {
-      tomorrowRuns = tomorrowRuns.where((run) => run.id != id).toList();
+      final targetDayKey = date == null ? null : _dayKey(date);
+      tomorrowRuns = tomorrowRuns.where((run) {
+        if (run.id != id) return true;
+        if (targetDayKey == null) return false;
+        return (run.planDateKey ?? _defaultTomorrowKey()) != targetDayKey;
+      }).toList();
     } else {
       todayRuns = todayRuns.where((run) => run.id != id).toList();
     }
     timers = timers.where((timer) => timer.runId != id).toList();
     await _saveData();
     notifyListeners();
+  }
+
+  List<LabRun> futureRunsForDate(DateTime date) {
+    final key = _dayKey(date);
+    return tomorrowRuns
+        .where((run) => (run.planDateKey ?? _defaultTomorrowKey()) == key)
+        .toList()
+      ..sort(_byTime);
   }
 
   Future<void> updateRun(LabRun updated) async {
@@ -19268,7 +19517,7 @@ class LabStore extends ChangeNotifier {
     }
   }
 
-  Future<void> endDay() async {
+  Future<void> endDay({DateTime? promoteDate}) async {
     for (final timer in timers) {
       await _cancelTimerNotification(timer.id);
     }
@@ -19282,16 +19531,26 @@ class LabStore extends ChangeNotifier {
       ),
       ...pastRuns,
     ];
-    todayRuns = tomorrowRuns.map((run) => run.copyWith(status: '已排期')).toList()
-      ..sort(_byTime);
-    tomorrowRuns = [];
+    final promoteKey = promoteDate == null
+        ? _defaultTomorrowKey()
+        : _dayKey(promoteDate);
+    final nextTodayRuns = tomorrowRuns
+        .where((run) => (run.planDateKey ?? promoteKey) == promoteKey)
+        .map((run) => run.copyWith(status: '已排期', clearPlanDateKey: true))
+        .toList();
+    todayRuns = nextTodayRuns..sort(_byTime);
+    tomorrowRuns =
+        tomorrowRuns
+            .where((run) => (run.planDateKey ?? promoteKey) != promoteKey)
+            .toList()
+          ..sort(_byTime);
     lastOpenDate = _dayKey(DateTime.now());
     await _saveData();
     notifyListeners();
   }
 
   Future<void> confirmNewDayRollover() async {
-    await endDay();
+    await endDay(promoteDate: DateTime.now());
   }
 
   Future<void> dismissNewDayRollover() async {
@@ -19510,6 +19769,7 @@ class LabStore extends ChangeNotifier {
         id: 'tomorrow-miniprep',
         timeLabel: '10:30',
         status: '已排期',
+        planDateKey: _defaultTomorrowKey(),
       ),
     ];
     pastRuns = [
@@ -19731,6 +19991,7 @@ class LabStore extends ChangeNotifier {
         data['lastOpenDate'] as String? ??
         data['lastLabBuddyOpenDate'] as String? ??
         '';
+    tomorrowRuns = _normalizeFutureRunDates(tomorrowRuns, lastOpenDate);
     projectPaletteValues = _intList(data['projectPaletteValues']);
     if (projectPaletteValues.isEmpty ||
         _samePalette(projectPaletteValues, defaultProjectPalette) ||
@@ -19741,6 +20002,24 @@ class LabStore extends ChangeNotifier {
       projectPaletteValues = List.of(defaultExperimentPalette);
     }
     if (todayRuns.isEmpty && inventory.isEmpty) _seed();
+  }
+
+  List<LabRun> _normalizeFutureRunDates(
+    List<LabRun> runs,
+    String lastOpenDateKey,
+  ) {
+    final lastOpenDate = _dateFromDayKey(lastOpenDateKey);
+    final fallbackKey = lastOpenDateKey.isEmpty
+        ? _defaultTomorrowKey()
+        : _dayKey(lastOpenDate.add(const Duration(days: 1)));
+    return runs
+        .map(
+          (run) => run.planDateKey == null
+              ? run.copyWith(planDateKey: fallbackKey)
+              : run,
+        )
+        .toList()
+      ..sort(_byTime);
   }
 
   bool _refreshSampleRunsForIosParity() {
@@ -19956,6 +20235,7 @@ class LabRun {
     required this.protocolName,
     required this.scaledVolumeLabel,
     required this.projectId,
+    this.planDateKey,
     required this.steps,
   });
 
@@ -19967,6 +20247,7 @@ class LabRun {
   final String protocolName;
   final String scaledVolumeLabel;
   final String? projectId;
+  final String? planDateKey;
   final List<LabStep> steps;
 
   int get completedCount => steps.where((step) => step.done).length;
@@ -19981,6 +20262,8 @@ class LabRun {
     String? scaledVolumeLabel,
     String? projectId,
     bool clearProjectId = false,
+    String? planDateKey,
+    bool clearPlanDateKey = false,
     List<LabStep>? steps,
   }) {
     return LabRun(
@@ -19992,6 +20275,7 @@ class LabRun {
       protocolName: protocolName ?? this.protocolName,
       scaledVolumeLabel: scaledVolumeLabel ?? this.scaledVolumeLabel,
       projectId: clearProjectId ? null : projectId ?? this.projectId,
+      planDateKey: clearPlanDateKey ? null : planDateKey ?? this.planDateKey,
       steps: steps ?? this.steps,
     );
   }
@@ -20005,6 +20289,7 @@ class LabRun {
     'protocolName': protocolName,
     'scaledVolumeLabel': scaledVolumeLabel,
     'projectId': projectId,
+    'planDateKey': planDateKey,
     'steps': steps.map((step) => step.toJson()).toList(),
   };
 
@@ -20017,6 +20302,7 @@ class LabRun {
     protocolName: json['protocolName'] as String? ?? '',
     scaledVolumeLabel: json['scaledVolumeLabel'] as String? ?? '',
     projectId: json['projectId'] as String?,
+    planDateKey: json['planDateKey'] as String?,
     steps: (json['steps'] as List? ?? [])
         .whereType<Map>()
         .map((item) => LabStep.fromJson(Map<String, dynamic>.from(item)))
