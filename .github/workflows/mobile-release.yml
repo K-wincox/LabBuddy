@@ -84,6 +84,9 @@ jobs:
           body: |
             LabBuddy mobile release.
 
+            Project homepage:
+            https://github.com/K-wincox/LabBuddy
+
             Android:
             - Download `LabBuddy-${{ github.ref_name }}-android.apk` and install it after allowing installs from unknown sources.
             - Demo login: `demo@labbuddy.app` / `labbuddy2026`

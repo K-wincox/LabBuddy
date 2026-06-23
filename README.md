@@ -2,6 +2,35 @@
 
 LabBuddy is a local-first iOS app prototype for wet-lab researchers. The current build focuses on a today-first bench workflow: calendar-like daily scheduling, protocol-based run creation, focused bench execution, step completion, local timers, calculators, inventory in the personal workspace, and shareable result cards.
 
+## Download and test
+
+GitHub repository:
+
+https://github.com/K-wincox/LabBuddy
+
+Latest dual-platform release:
+
+https://github.com/K-wincox/LabBuddy/releases/tag/v1.0.1
+
+Android users can download and install the APK directly:
+
+https://github.com/K-wincox/LabBuddy/releases/download/v1.0.1/LabBuddy-v1.0.1-android.apk
+
+iOS users can download the Xcode prototype package:
+
+https://github.com/K-wincox/LabBuddy/releases/download/v1.0.1/LabBuddy-v1.0.1-ios-prototype.zip
+
+Demo login for Android local test builds:
+
+- Email: `demo@labbuddy.app`
+- Password: `labbuddy2026`
+
+Android installation: download the APK on an Android phone, open it, and allow installation from the browser or file manager if Android asks for permission to install apps from unknown sources.
+
+iOS usage: download and unzip the iOS prototype package on a Mac with Xcode, then open `LabBuddy.xcodeproj` or double-click `Open-LabBuddy.command`, choose an iPhone Simulator, and run the app. The current iOS package is not a directly installable iPhone `.ipa`; direct iPhone installation requires Apple signing/provisioning, TestFlight, App Store distribution, or ad hoc device registration.
+
+More detailed tester instructions are in [docs/USER_DOWNLOAD.md](docs/USER_DOWNLOAD.md).
+
 ## Open locally
 
 1. Install Xcode from the Mac App Store.

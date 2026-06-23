@@ -9,6 +9,24 @@ From GitHub Releases, download:
 - `LabBuddy-<version>-ios-prototype.zip`
 - `LabBuddy-<version>-ios-prototype.zip.sha256`
 
+Current release:
+
+```text
+https://github.com/K-wincox/LabBuddy/releases/tag/v1.0.1
+```
+
+Current iOS prototype package:
+
+```text
+https://github.com/K-wincox/LabBuddy/releases/download/v1.0.1/LabBuddy-v1.0.1-ios-prototype.zip
+```
+
+Optional checksum:
+
+```text
+https://github.com/K-wincox/LabBuddy/releases/download/v1.0.1/LabBuddy-v1.0.1-ios-prototype.zip.sha256
+```
+
 ## Run on macOS with Xcode
 
 Unzip the package, then either:

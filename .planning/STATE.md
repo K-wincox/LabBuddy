@@ -70,6 +70,12 @@ Recent decisions affecting current work:
 | Platform | Android app | Deferred | Initialization |
 | Sync | Account/cloud sync | Deferred | Initialization |
 
+## Quick Tasks Completed
+
+| Date | Task | Summary |
+|------|------|---------|
+| 2026-06-23 | Write GitHub download and demo login instructions | Added GitHub-facing Android/iOS download links, install guidance, and preset demo login to README and release docs. |
+
 ## Session Continuity
 
 Last session: 2026-05-29
