@@ -1,0 +1,4 @@
+storePassword=replace-with-local-keystore-password
+keyPassword=replace-with-local-key-password
+keyAlias=labbuddy
+storeFile=../../release/labbuddy-release.jks
