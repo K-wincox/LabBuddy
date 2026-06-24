@@ -403,72 +403,80 @@ class _IosSwipeDeleteState extends State<IosSwipeDelete> {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: _revealed
-                  ? GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _delete(context),
-                      child: Container(
-                        width: _deleteWidth,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFF3B30),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.delete_outline,
-                              color: Colors.white,
-                              size: 23,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final revealedWidth = constraints.hasBoundedWidth
+            ? math.max(0.0, constraints.maxWidth - _deleteWidth)
+            : null;
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: _revealed
+                      ? GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _delete(context),
+                          child: Container(
+                            width: _deleteWidth,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFF3B30),
                             ),
-                            SizedBox(height: 2),
-                            Text(
-                              '删除',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                              ),
+                            alignment: Alignment.center,
+                            child: const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.white,
+                                  size: 23,
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  '删除',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+              GestureDetector(
+                behavior: HitTestBehavior.deferToChild,
+                onHorizontalDragUpdate: (details) {
+                  final next = (_offset + details.delta.dx).clamp(
+                    -_deleteWidth,
+                    0.0,
+                  );
+                  if (next != _offset) setState(() => _offset = next);
+                },
+                onHorizontalDragEnd: (details) {
+                  final velocity = details.primaryVelocity ?? 0;
+                  final shouldReveal = velocity < -250 || _offset < -36;
+                  setState(() => _offset = shouldReveal ? -_deleteWidth : 0);
+                },
+                onTap: _revealed ? () => setState(() => _offset = 0) : null,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  transform: Matrix4.translationValues(_offset, 0, 0),
+                  width: _revealed ? revealedWidth : null,
+                  child: widget.child,
+                ),
+              ),
+            ],
           ),
-          GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onHorizontalDragUpdate: (details) {
-              final next = (_offset + details.delta.dx).clamp(
-                -_deleteWidth,
-                0.0,
-              );
-              if (next != _offset) setState(() => _offset = next);
-            },
-            onHorizontalDragEnd: (details) {
-              final velocity = details.primaryVelocity ?? 0;
-              final shouldReveal = velocity < -250 || _offset < -36;
-              setState(() => _offset = shouldReveal ? -_deleteWidth : 0);
-            },
-            onTap: _revealed ? () => setState(() => _offset = 0) : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
-              transform: Matrix4.translationValues(_offset, 0, 0),
-              child: widget.child,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -2409,11 +2417,38 @@ class _FuturePlanCalendarViewState extends State<FuturePlanCalendarView> {
                 selectedProjectId: widget.selectedProjectId,
                 allowFutureMonths: true,
                 allowEmptySelection: true,
-                firstSelectableDate: _dayStart(DateTime.now()),
+                firstSelectableDate: _dayStart(
+                  DateTime.now().add(const Duration(days: 1)),
+                ),
                 footerText: '选择未来日期，提前安排实验计划',
                 onMonthChanged: (month) => setState(() => displayMonth = month),
                 onDaySelected: (key) =>
                     widget.onDateSelected(_dateFromDayKey(key)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.event_available, color: _teal),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '${_futureDateLabel(widget.selectedDate)} · ${selectedRuns.length} 个计划',
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      FilledButton.icon(
+                        onPressed: widget.addRun,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('添加'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
             SizedBox(

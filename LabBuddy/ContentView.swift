@@ -71,16 +71,21 @@ struct ContentView: View {
     private var mainApp: some View {
         NavigationStack {
             TabView {
-                TodayView(importedRuns: $importedRuns, tomorrowRuns: $tomorrowRuns, pastDays: $pastDays, projects: projects, onEndDay: endDay)
-                    .tabItem { Label("今日", systemImage: "calendar") }
+                TodayView(
+                    importedRuns: $importedRuns, tomorrowRuns: $tomorrowRuns, pastDays: $pastDays,
+                    projects: projects, onEndDay: endDay
+                )
+                .tabItem { Label("今日", systemImage: "calendar") }
 
                 ProtocolLibraryView()
                     .tabItem { Label("Protocol", systemImage: "list.clipboard") }
                 CalculatorToolkitView()
                     .tabItem { Label("工具", systemImage: "function") }
                 NavigationStack {
-                    MyWorkspaceView(items: $inventoryItems, projects: $projects, resetDemoData: resetDemoData)
-                        .navigationTitle("我的")
+                    MyWorkspaceView(
+                        items: $inventoryItems, projects: $projects, resetDemoData: resetDemoData
+                    )
+                    .navigationTitle("我的")
                 }
                 .tabItem { Label("我的", systemImage: "person.crop.circle") }
             }
@@ -104,10 +109,13 @@ struct ContentView: View {
     }
 
     private func endDay() {
-        performRollover()
+        performRollover(
+            promoteDateKey: Self.dayKey(
+                for: Calendar(identifier: .gregorian).date(byAdding: .day, value: 1, to: Date())
+                    ?? Date()))
     }
 
-    private func performRollover() {
+    private func performRollover(promoteDateKey: String? = nil) {
         let todayKey = lastOpenDate.isEmpty ? Self.dayKey(for: Date()) : lastOpenDate
         let todaysRuns = importedRuns.sortedByTimeLabel()
         if !todaysRuns.isEmpty {
@@ -121,10 +129,25 @@ struct ContentView: View {
             pastDays.removeAll { $0.id == archive.id }
             pastDays.insert(archive, at: 0)
         }
-        importedRuns = tomorrowRuns.map {
-            LabRun(id: $0.id, title: $0.title, area: $0.area, timeLabel: $0.timeLabel, status: "已排期", protocolName: $0.protocolName, scaledVolumeLabel: $0.scaledVolumeLabel, projectID: $0.projectID, steps: $0.steps)
+        let targetKey = promoteDateKey ?? Self.dayKey(for: Date())
+        let promotedRuns = tomorrowRuns.filter {
+            ($0.planDateKey
+                ?? Self.dayKey(
+                    for: Self.dateByAdding(days: 1, to: Self.date(from: lastOpenDate) ?? Date())))
+                == targetKey
         }
-        tomorrowRuns = []
+        importedRuns = promotedRuns.map {
+            LabRun(
+                id: $0.id, title: $0.title, area: $0.area, timeLabel: $0.timeLabel, status: "已排期",
+                protocolName: $0.protocolName, scaledVolumeLabel: $0.scaledVolumeLabel,
+                projectID: $0.projectID, steps: $0.steps)
+        }
+        tomorrowRuns.removeAll {
+            ($0.planDateKey
+                ?? Self.dayKey(
+                    for: Self.dateByAdding(days: 1, to: Self.date(from: lastOpenDate) ?? Date())))
+                == targetKey
+        }
         lastOpenDate = Self.dayKey(for: Date())
     }
 
@@ -138,31 +161,36 @@ struct ContentView: View {
 
     private func loadAll() {
         if let data = UserDefaults.standard.data(forKey: "importedLabRuns"),
-           let runs = try? JSONDecoder().decode([LabRun].self, from: data) {
+            let runs = try? JSONDecoder().decode([LabRun].self, from: data)
+        {
             importedRuns = runs
         } else {
             importedRuns = []
         }
         if let data = UserDefaults.standard.data(forKey: "tomorrowLabRuns"),
-           let runs = try? JSONDecoder().decode([LabRun].self, from: data) {
-            tomorrowRuns = runs
+            let runs = try? JSONDecoder().decode([LabRun].self, from: data)
+        {
+            tomorrowRuns = Self.normalizedFuturePlanDates(runs, lastOpenDateKey: lastOpenDate)
         } else {
             tomorrowRuns = []
         }
         if let data = UserDefaults.standard.data(forKey: "pastExperimentDays"),
-           let days = try? JSONDecoder().decode([ExperimentDayRecord].self, from: data) {
+            let days = try? JSONDecoder().decode([ExperimentDayRecord].self, from: data)
+        {
             pastDays = days
         } else {
             pastDays = []
         }
         if let data = UserDefaults.standard.data(forKey: "inventoryItems"),
-           let items = try? JSONDecoder().decode([InventoryItem].self, from: data) {
+            let items = try? JSONDecoder().decode([InventoryItem].self, from: data)
+        {
             inventoryItems = items
         } else {
             inventoryItems = []
         }
         if let data = UserDefaults.standard.data(forKey: "userProjects"),
-           let projs = try? JSONDecoder().decode([Project].self, from: data), !projs.isEmpty {
+            let projs = try? JSONDecoder().decode([Project].self, from: data), !projs.isEmpty
+        {
             projects = projs
         } else {
             projects = []
@@ -186,13 +214,18 @@ struct ContentView: View {
     }
 
     private static func normalizedStepTimers(_ run: LabRun) -> LabRun {
-        guard let protocolTemplate = SampleData.protocols.first(where: { $0.name == run.protocolName }) else {
+        guard
+            let protocolTemplate = SampleData.protocols.first(where: { $0.name == run.protocolName }
+            )
+        else {
             return run
         }
-        let templateDurations = Dictionary(uniqueKeysWithValues: protocolTemplate.steps.map { ($0.id, $0.durationMinutes) })
+        let templateDurations = Dictionary(
+            uniqueKeysWithValues: protocolTemplate.steps.map { ($0.id, $0.durationMinutes) })
         let normalizedSteps = run.steps.map { step in
             var normalized = step
-            for (templateID, duration) in templateDurations where normalized.id.hasPrefix("\(templateID)-") {
+            for (templateID, duration) in templateDurations
+            where normalized.id.hasPrefix("\(templateID)-") {
                 normalized.durationMinutes = duration
                 break
             }
@@ -218,14 +251,18 @@ struct ContentView: View {
         for run in allRuns {
             if let ctx = run.projectID, !ctx.isEmpty, !projects.contains(where: { $0.id == ctx }) {
                 // Legacy free-text projectContext — create a Project from it
-                let newProject = Project(name: ctx, colorHex: Project.nextPaletteHex(for: projects.count), description: "")
+                let newProject = Project(
+                    name: ctx, colorHex: Project.nextPaletteHex(for: projects.count),
+                    description: "")
                 projects.append(newProject)
                 needsSave = true
             }
         }
         // Migrate runs with legacy projectContext to projectID
         for i in importedRuns.indices {
-            if let ctx = importedRuns[i].projectID, !ctx.isEmpty, projects.contains(where: { $0.id == ctx || $0.name == ctx }) {
+            if let ctx = importedRuns[i].projectID, !ctx.isEmpty,
+                projects.contains(where: { $0.id == ctx || $0.name == ctx })
+            {
                 if let project = projects.first(where: { $0.name == ctx }) {
                     importedRuns[i].projectID = project.id
                     needsSave = true
@@ -316,23 +353,54 @@ struct ContentView: View {
     // MARK: - Date helpers
 
     static func dayKey(for date: Date) -> String {
-        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "yyyy-MM-dd"
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "yyyy-MM-dd"
         return f.string(from: date)
     }
 
     static func displayDateLabel(from key: String) -> String {
-        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "yyyy-MM-dd"
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "yyyy-MM-dd"
         guard let date = f.date(from: key) else { return key }
-        f.dateFormat = "M月d日"; return f.string(from: date)
+        f.dateFormat = "M月d日"
+        return f.string(from: date)
+    }
+
+    static func date(from key: String) -> Date? {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: key)
+    }
+
+    static func dateByAdding(days: Int, to date: Date) -> Date {
+        Calendar(identifier: .gregorian).date(byAdding: .day, value: days, to: date) ?? date
+    }
+
+    static func normalizedFuturePlanDates(_ runs: [LabRun], lastOpenDateKey: String) -> [LabRun] {
+        let fallbackDate = dateByAdding(days: 1, to: date(from: lastOpenDateKey) ?? Date())
+        let fallbackKey = dayKey(for: fallbackDate)
+        return runs.map { run in
+            guard run.planDateKey == nil else { return run }
+            var next = run
+            next.planDateKey = fallbackKey
+            return next
+        }
     }
 
     static func weekdayLabel(from key: String) -> String {
-        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "yyyy-MM-dd"
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "yyyy-MM-dd"
         guard let date = f.date(from: key) else { return "" }
-        f.dateFormat = "EEE"; return f.string(from: date)
+        f.dateFormat = "EEE"
+        return f.string(from: date)
     }
 }
 
@@ -346,7 +414,7 @@ private struct NewDayConfirmSheet: View {
         "新的一天，继续加油 💪",
         "昨天的实验已归档，今天从头开始",
         "保持节奏，今天也会顺利的",
-        "每一天的数据都值得被好好记录"
+        "每一天的数据都值得被好好记录",
     ]
 
     var body: some View {
@@ -394,7 +462,6 @@ private struct NewDayConfirmSheet: View {
         .presentationDetents([.medium])
     }
 }
-
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {

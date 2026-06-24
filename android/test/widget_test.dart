@@ -3222,6 +3222,10 @@ void main() {
 
     expect(find.text('选择未来日期，提前安排实验计划'), findsOneWidget);
     expect(find.byType(PastCalendarCard), findsOneWidget);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -260));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('个计划'), findsWidgets);
+    expect(find.text('添加'), findsWidgets);
   });
 
   testWidgets('Past run opens iOS-style record detail before Data Card', (
@@ -4106,6 +4110,31 @@ void main() {
     expect(store.favoriteProtocolIds, isEmpty);
     expect(store.recentProtocolIds, isEmpty);
     expect(find.text(protocol.name), findsNothing);
+  });
+
+  testWidgets('Protocol library swipe delete button removes protocol', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LabStore();
+    final protocol = sampleProtocols.first;
+    store.protocols = [protocol];
+
+    await tester.pumpWidget(MaterialApp(home: ProtocolScreen(store: store)));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(IosSwipeDelete).first, const Offset(-120, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除'), findsOneWidget);
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除 Protocol？'), findsOneWidget);
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(store.protocols, isEmpty);
   });
 
   testWidgets('Protocol cards use area-tinted iOS-style sections', (

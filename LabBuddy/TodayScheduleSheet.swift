@@ -9,6 +9,8 @@ struct ScheduleRequest: Identifiable {
     let id = UUID()
     let targetDay: PlanTargetDay
     let timeLabel: String
+    var dateKey: String?
+    var dateLabel: String?
 }
 
 private enum AddExperimentPath: String, CaseIterable, Identifiable {
@@ -44,7 +46,8 @@ struct AddExperimentSheet: View {
 
     private var destinationTitle: String {
         let timeStr = draftTimeLabel.isEmpty ? request.timeLabel : draftTimeLabel
-        return request.targetDay == .today ? "今天 \(timeStr)" : "明天 \(timeStr)"
+        if request.targetDay == .today { return "今天 \(timeStr)" }
+        return "\(request.dateLabel ?? "明天") \(timeStr)"
     }
 
     var body: some View {
@@ -68,8 +71,10 @@ struct AddExperimentSheet: View {
                                 .font(.headline)
                                 .foregroundStyle(.primary)
                             Spacer()
-                            Image(systemName: editingTime ? "checkmark.circle.fill" : "pencil.circle")
-                                .foregroundStyle(.teal)
+                            Image(
+                                systemName: editingTime ? "checkmark.circle.fill" : "pencil.circle"
+                            )
+                            .foregroundStyle(.teal)
                         }
                     }
                     .buttonStyle(.plain)
@@ -84,7 +89,8 @@ struct AddExperimentSheet: View {
                             .pickerStyle(.wheel)
                             .frame(width: 80)
                             .onChange(of: selectedHour) { _, _ in
-                                draftTimeLabel = String(format: "%02d:%02d", selectedHour, selectedMinute)
+                                draftTimeLabel = String(
+                                    format: "%02d:%02d", selectedHour, selectedMinute)
                             }
 
                             Text(":").font(.title2.bold())
@@ -97,7 +103,8 @@ struct AddExperimentSheet: View {
                             .pickerStyle(.wheel)
                             .frame(width: 80)
                             .onChange(of: selectedMinute) { _, _ in
-                                draftTimeLabel = String(format: "%02d:%02d", selectedHour, selectedMinute)
+                                draftTimeLabel = String(
+                                    format: "%02d:%02d", selectedHour, selectedMinute)
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -111,15 +118,22 @@ struct AddExperimentSheet: View {
                             ForEach(SampleData.protocols) { p in Text(p.name).tag(p.id) }
                         }
                         .onChange(of: selectedProtocolID) { _, _ in
-                            if experimentName.isEmpty || experimentName == SampleData.protocols.first(where: { $0.id == selectedProtocolID })?.name {
+                            if experimentName.isEmpty
+                                || experimentName
+                                    == SampleData.protocols.first(where: {
+                                        $0.id == selectedProtocolID
+                                    })?.name
+                            {
                                 experimentName = selectedProtocol.name
                             }
                         }
                     }
 
                     Section("实验命名") {
-                        TextField("实验名称", text: $experimentName, prompt: Text(selectedProtocol.name))
-                            .font(.body)
+                        TextField(
+                            "实验名称", text: $experimentName, prompt: Text(selectedProtocol.name)
+                        )
+                        .font(.body)
                         if !projects.isEmpty {
                             Picker("所属项目", selection: $selectedProjectID) {
                                 Text("无项目").tag(nil as String?)
@@ -184,10 +198,13 @@ struct AddExperimentSheet: View {
                         onAdd(run)
                         dismiss()
                     } label: {
-                        Label("加入时间流", systemImage: "calendar.badge.plus").frame(maxWidth: .infinity)
+                        Label("加入时间流", systemImage: "calendar.badge.plus").frame(
+                            maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(path == .manual && manualTitle.isEmpty || path == .carryOver && carryOverTitle.isEmpty)
+                    .disabled(
+                        path == .manual && manualTitle.isEmpty
+                            || path == .carryOver && carryOverTitle.isEmpty)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -217,16 +234,39 @@ struct AddExperimentSheet: View {
         switch path {
         case .importProtocol:
             let factor = targetVolume / selectedProtocol.baseVolume
-            let recipeSummary = selectedProtocol.ingredients.prefix(3).map { "\($0.name) \($0.scaled(by: factor))" }.joined(separator: " / ")
+            let recipeSummary = selectedProtocol.ingredients.prefix(3).map {
+                "\($0.name) \($0.scaled(by: factor))"
+            }.joined(separator: " / ")
             let dur = estimatedMinutes(from: selectedProtocol.expectedDuration)
-            let steps: [LabStep] = [
-                LabStep(id: "review-\(ts)", title: "核对换算配方", detail: recipeSummary, durationMinutes: nil, isCarryOver: false)
-            ] + (selectedProtocol.steps.isEmpty ? [LabStep(id: "exec-\(ts)", title: "执行 Protocol", detail: selectedProtocol.name, durationMinutes: dur, isCarryOver: false)] : selectedProtocol.steps.map { s in
-                LabStep(id: "\(s.id)-\(ts)", title: s.title, detail: s.detail, durationMinutes: s.durationMinutes, isCarryOver: s.isCarryOver)
-            }) + [LabStep(id: "record-\(ts)", title: "记录结果", detail: "完成后生成结果卡片", durationMinutes: nil, isCarryOver: false)]
+            let steps: [LabStep] =
+                [
+                    LabStep(
+                        id: "review-\(ts)", title: "核对换算配方", detail: recipeSummary,
+                        durationMinutes: nil,
+                        isCarryOver: false)
+                ]
+                + (selectedProtocol.steps.isEmpty
+                    ? [
+                        LabStep(
+                            id: "exec-\(ts)", title: "执行 Protocol", detail: selectedProtocol.name,
+                            durationMinutes: dur, isCarryOver: false)
+                    ]
+                    : selectedProtocol.steps.map { s in
+                        LabStep(
+                            id: "\(s.id)-\(ts)", title: s.title, detail: s.detail,
+                            durationMinutes: s.durationMinutes, isCarryOver: s.isCarryOver)
+                    }) + [
+                    LabStep(
+                        id: "record-\(ts)", title: "记录结果", detail: "完成后生成结果卡片",
+                        durationMinutes: nil,
+                        isCarryOver: false)
+                ]
 
-            let finalName = experimentName.trimmingCharacters(in: .whitespaces).isEmpty ? selectedProtocol.name : experimentName
-            let volumeLabel = "\(formatVol(targetVolume)) \(selectedProtocol.volumeUnit) · x\(String(format: "%.2f", factor))"
+            let finalName =
+                experimentName.trimmingCharacters(in: .whitespaces).isEmpty
+                ? selectedProtocol.name : experimentName
+            let volumeLabel =
+                "\(formatVol(targetVolume)) \(selectedProtocol.volumeUnit) · x\(String(format: "%.2f", factor))"
             let project = selectedProjectID
 
             return LabRun(
@@ -238,6 +278,7 @@ struct AddExperimentSheet: View {
                 protocolName: selectedProtocol.name,
                 scaledVolumeLabel: volumeLabel,
                 projectID: project,
+                planDateKey: request.targetDay == .tomorrow ? request.dateKey : nil,
                 steps: steps
             )
 
@@ -251,8 +292,12 @@ struct AddExperimentSheet: View {
                 protocolName: "手动实验",
                 scaledVolumeLabel: "",
                 projectID: nil,
+                planDateKey: request.targetDay == .tomorrow ? request.dateKey : nil,
                 steps: [
-                    LabStep(id: "manual-step-\(ts)", title: manualTitle, detail: manualNote.isEmpty ? "手动实验" : manualNote, durationMinutes: nil, isCarryOver: false)
+                    LabStep(
+                        id: "manual-step-\(ts)", title: manualTitle,
+                        detail: manualNote.isEmpty ? "手动实验" : manualNote, durationMinutes: nil,
+                        isCarryOver: false)
                 ]
             )
 
@@ -266,8 +311,12 @@ struct AddExperimentSheet: View {
                 protocolName: "顺延占位",
                 scaledVolumeLabel: "",
                 projectID: nil,
+                planDateKey: request.targetDay == .tomorrow ? request.dateKey : nil,
                 steps: [
-                    LabStep(id: "co-step-\(ts)", title: carryOverTitle, detail: "跨夜或长时间进行中", durationMinutes: nil, isCarryOver: true)
+                    LabStep(
+                        id: "co-step-\(ts)", title: carryOverTitle, detail: "跨夜或长时间进行中",
+                        durationMinutes: nil,
+                        isCarryOver: true)
                 ]
             )
         }

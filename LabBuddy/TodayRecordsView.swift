@@ -24,7 +24,8 @@ private func projectDots(for runs: [LabRun], projects: [Project]) -> [ProjectCal
     var dots: [ProjectCalendarDot] = []
     for run in runs {
         guard let project = projectForRun(run, projects: projects),
-              !seen.contains(project.id) else { continue }
+            !seen.contains(project.id)
+        else { continue }
         seen.insert(project.id)
         dots.append(ProjectCalendarDot(projectID: project.id, color: Color(hex: project.colorHex)))
     }
@@ -56,7 +57,9 @@ struct ExperimentCalendarView: View {
     private var selectableDays: [ExperimentDayRecord] {
         guard let projectFilter else { return days }
         return days.filter { day in
-            projectDots(for: day.runs, projects: projects).contains { $0.projectID == projectFilter }
+            projectDots(for: day.runs, projects: projects).contains {
+                $0.projectID == projectFilter
+            }
         }
     }
 
@@ -73,7 +76,8 @@ struct ExperimentCalendarView: View {
     private var gridDays: [Date?] {
         let comps = cal.dateComponents([.year, .month], from: displayMonth)
         guard let firstOfMonth = cal.date(from: comps),
-              let range = cal.range(of: .day, in: .month, for: firstOfMonth) else { return [] }
+            let range = cal.range(of: .day, in: .month, for: firstOfMonth)
+        else { return [] }
 
         // weekday index 0=Mon … 6=Sun
         let firstWeekday = (cal.component(.weekday, from: firstOfMonth) + 5) % 7
@@ -155,15 +159,18 @@ struct ExperimentCalendarView: View {
                         .frame(width: 36, height: 36)
                 }
                 .buttonStyle(.plain)
-                .disabled({
-                    let next = monthByAdding(1)
-                    return monthStart(next) > monthStart(Date())
-                }())
+                .disabled(
+                    {
+                        let next = monthByAdding(1)
+                        return monthStart(next) > monthStart(Date())
+                    }())
             }
 
             // Weekday header: 一 二 三 四 五 六 日
             let weekdaySymbols = ["一", "二", "三", "四", "五", "六", "日"]
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4
+            ) {
                 ForEach(weekdaySymbols, id: \.self) { sym in
                     Text(sym)
                         .font(.caption.weight(.semibold))
@@ -188,8 +195,9 @@ struct ExperimentCalendarView: View {
                         ) {
                             let key = dayKey(date)
                             if selectableRecordIndex[key] != nil,
-                               let record = recordIndex[key],
-                               dayContainsSelectedProjectDot(record) {
+                                let record = recordIndex[key],
+                                dayContainsSelectedProjectDot(record)
+                            {
                                 selectedDayID = key
                             }
                         }
@@ -228,7 +236,8 @@ struct ExperimentCalendarView: View {
     }
 
     private func syncSelectionToFilter() {
-        let nextDay = selectableDays.first { $0.id == selectedDayID } ?? selectableDays.first ?? days.first
+        let nextDay =
+            selectableDays.first { $0.id == selectedDayID } ?? selectableDays.first ?? days.first
         guard let nextDay else { return }
         selectedDayID = nextDay.id
 
@@ -243,7 +252,178 @@ struct ExperimentCalendarView: View {
 
     private func dayContainsSelectedProjectDot(_ day: ExperimentDayRecord) -> Bool {
         guard let projectFilter else { return !day.runs.isEmpty }
-        return projectDots(for: day.runs, projects: projects).contains { $0.projectID == projectFilter }
+        return projectDots(for: day.runs, projects: projects).contains {
+            $0.projectID == projectFilter
+        }
+    }
+}
+
+struct FuturePlanCalendarView: View {
+    let runs: [LabRun]
+    @Binding var selectedDate: Date
+    var projects: [Project] = []
+    var projectFilter: String? = nil
+
+    @State private var displayMonth: Date = {
+        Calendar(identifier: .gregorian).startOfDay(for: Date())
+    }()
+    @State private var cellScale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+
+    private var cal: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.locale = Locale(identifier: "zh_CN")
+        return c
+    }
+
+    private var tomorrow: Date {
+        cal.startOfDay(for: cal.date(byAdding: .day, value: 1, to: Date()) ?? Date())
+    }
+
+    private var selectedProject: Project? {
+        guard let projectFilter else { return nil }
+        return projects.first { $0.id == projectFilter }
+    }
+
+    private var monthTitle: String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.dateFormat = "yyyy年M月"
+        return fmt.string(from: displayMonth)
+    }
+
+    private var gridDays: [Date?] {
+        let comps = cal.dateComponents([.year, .month], from: displayMonth)
+        guard let firstOfMonth = cal.date(from: comps),
+            let range = cal.range(of: .day, in: .month, for: firstOfMonth)
+        else { return [] }
+
+        let firstWeekday = (cal.component(.weekday, from: firstOfMonth) + 5) % 7
+        var result: [Date?] = Array(repeating: nil, count: firstWeekday)
+        for day in range {
+            result.append(cal.date(byAdding: .day, value: day - 1, to: firstOfMonth))
+        }
+        while result.count % 7 != 0 { result.append(nil) }
+        return result
+    }
+
+    private func monthStart(_ date: Date) -> Date {
+        let comps = cal.dateComponents([.year, .month], from: date)
+        return cal.date(from: comps) ?? cal.startOfDay(for: date)
+    }
+
+    private func monthByAdding(_ value: Int) -> Date {
+        let start = monthStart(displayMonth)
+        return cal.date(byAdding: .month, value: value, to: start) ?? displayMonth
+    }
+
+    private func dayKey(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.calendar = cal
+        fmt.dateFormat = "yyyy-MM-dd"
+        return fmt.string(from: date)
+    }
+
+    private func runs(for date: Date) -> [LabRun] {
+        let key = dayKey(date)
+        let fallback = dayKey(tomorrow)
+        let dayRuns = runs.filter { ($0.planDateKey ?? fallback) == key }
+        guard let projectFilter else { return dayRuns }
+        return dayRuns.filter {
+            runMatchesProject($0, projectFilter: projectFilter, projects: projects)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Button {
+                    displayMonth = monthByAdding(-1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.teal)
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
+                .disabled(monthStart(monthByAdding(-1)) < monthStart(tomorrow))
+
+                Spacer()
+
+                Text(monthTitle)
+                    .font(.headline)
+
+                Spacer()
+
+                Button {
+                    displayMonth = monthByAdding(1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.teal)
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(.plain)
+            }
+
+            let weekdaySymbols = ["一", "二", "三", "四", "五", "六", "日"]
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4
+            ) {
+                ForEach(weekdaySymbols, id: \.self) { sym in
+                    Text(sym)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+
+                ForEach(Array(gridDays.enumerated()), id: \.offset) { _, date in
+                    if let date {
+                        let planRuns = runs(for: date)
+                        FutureCalendarGridCell(
+                            date: date,
+                            runs: planRuns,
+                            isSelected: cal.isDate(date, inSameDayAs: selectedDate),
+                            isToday: cal.isDateInToday(date),
+                            isBeforeTomorrow: cal.startOfDay(for: date) < tomorrow,
+                            cellScale: cellScale,
+                            projects: projects,
+                            projectFilter: projectFilter,
+                            selectedProject: selectedProject
+                        ) {
+                            selectedDate = cal.startOfDay(for: date)
+                        }
+                    } else {
+                        Color.clear
+                            .frame(height: baseCellHeight * cellScale)
+                    }
+                }
+            }
+
+            Text("选择未来日期，提前安排实验计划")
+                .font(.caption2)
+                .foregroundStyle(.secondary.opacity(0.65))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(16)
+        .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
+        .gesture(
+            MagnificationGesture()
+                .onChanged { value in
+                    let proposed = lastScale * value
+                    cellScale = min(max(proposed, 0.6), 1.6)
+                }
+                .onEnded { _ in
+                    lastScale = cellScale
+                }
+        )
+        .onAppear {
+            displayMonth = monthStart(selectedDate)
+        }
+        .onChange(of: selectedDate) { _, newValue in
+            displayMonth = monthStart(newValue)
+        }
     }
 }
 
@@ -312,13 +492,23 @@ private struct CalendarGridCell: View {
         Button(action: onTap) {
             VStack(spacing: 2) {
                 Text(dayNumber)
-                    .font(.system(size: max(11, 14 * cellScale), weight: isToday ? .bold : hasRecord ? .semibold : .regular))
+                    .font(
+                        .system(
+                            size: max(11, 14 * cellScale),
+                            weight: isToday ? .bold : hasRecord ? .semibold : .regular)
+                    )
                     .foregroundStyle(
-                        isSelected ? .white :
-                        isFuture ? Color.secondary.opacity(0.25) :
-                        isToday ? activeColor :
-                        shouldLightDate ? activeColor :
-                        hasRecord ? Color.secondary.opacity(inactiveRecordOpacity) : Color.secondary.opacity(0.25)
+                        isSelected
+                            ? .white
+                            : isFuture
+                                ? Color.secondary.opacity(0.25)
+                                : isToday
+                                    ? activeColor
+                                    : shouldLightDate
+                                        ? activeColor
+                                        : hasRecord
+                                            ? Color.secondary.opacity(inactiveRecordOpacity)
+                                            : Color.secondary.opacity(0.25)
                     )
 
                 if cellScale > 0.75 && shouldLightDate {
@@ -348,20 +538,116 @@ private struct CalendarGridCell: View {
             .frame(maxWidth: .infinity)
             .frame(height: cellH)
             .background(
-                isSelected ? activeColor :
-                isToday && !isSelected ? activeColor.opacity(0.10) :
-                shouldLightDate ? activeColor.opacity(0.08) :
-                hasRecord && projectFilter == nil ? Color.teal.opacity(0.04) :
-                Color.clear,
+                isSelected
+                    ? activeColor
+                    : isToday && !isSelected
+                        ? activeColor.opacity(0.10)
+                        : shouldLightDate
+                            ? activeColor.opacity(0.08)
+                            : hasRecord && projectFilter == nil
+                                ? Color.teal.opacity(0.04) : Color.clear,
                 in: RoundedRectangle(cornerRadius: 6)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(shouldLightDate && !isSelected ? activeColor.opacity(0.18) : Color.clear, lineWidth: 1)
+                    .stroke(
+                        shouldLightDate && !isSelected ? activeColor.opacity(0.18) : Color.clear,
+                        lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
+    }
+}
+
+private struct FutureCalendarGridCell: View {
+    let date: Date
+    let runs: [LabRun]
+    let isSelected: Bool
+    let isToday: Bool
+    let isBeforeTomorrow: Bool
+    let cellScale: CGFloat
+    var projects: [Project] = []
+    var projectFilter: String? = nil
+    var selectedProject: Project? = nil
+    let onTap: () -> Void
+
+    private var dayNumber: String {
+        "\(Calendar(identifier: .gregorian).component(.day, from: date))"
+    }
+
+    private var hasPlans: Bool { !runs.isEmpty }
+
+    private var activeColor: Color {
+        if let selectedProject {
+            return Color(hex: selectedProject.colorHex)
+        }
+        return .teal
+    }
+
+    private var dotColors: [Color] {
+        let dots = projectDots(for: runs, projects: projects)
+        let visible = projectFilter == nil ? dots : dots.filter { $0.projectID == projectFilter }
+        return visible.prefix(3).map(\.color)
+    }
+
+    var body: some View {
+        let cellH = baseCellHeight * cellScale
+
+        Button(action: onTap) {
+            VStack(spacing: 2) {
+                Text(dayNumber)
+                    .font(
+                        .system(
+                            size: max(11, 14 * cellScale),
+                            weight: isSelected || hasPlans ? .semibold : .regular)
+                    )
+                    .foregroundStyle(
+                        isSelected
+                            ? .white
+                            : isBeforeTomorrow
+                                ? Color.secondary.opacity(0.24)
+                                : isToday
+                                    ? activeColor
+                                    : hasPlans ? activeColor : Color.secondary.opacity(0.62)
+                    )
+
+                if cellScale > 0.75 && hasPlans {
+                    HStack(spacing: 2) {
+                        ForEach(Array(dotColors.enumerated()), id: \.offset) { _, color in
+                            Circle()
+                                .fill(isSelected ? Color.white.opacity(0.9) : color)
+                                .frame(width: 4, height: 4)
+                        }
+                        if dotColors.isEmpty {
+                            Circle()
+                                .fill(isSelected ? Color.white.opacity(0.9) : activeColor)
+                                .frame(width: 4, height: 4)
+                        }
+                    }
+                } else {
+                    Color.clear.frame(height: 2)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: cellH)
+            .background(
+                isSelected
+                    ? activeColor
+                    : hasPlans
+                        ? activeColor.opacity(0.10)
+                        : isToday ? activeColor.opacity(0.06) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 6)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(
+                        hasPlans && !isSelected ? activeColor.opacity(0.18) : Color.clear,
+                        lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isBeforeTomorrow)
     }
 }
 
@@ -374,7 +660,9 @@ struct ExperimentDayDetailView: View {
 
     private var filteredRuns: [LabRun] {
         guard let projectFilter else { return day.runs }
-        return day.runs.filter { runMatchesProject($0, projectFilter: projectFilter, projects: projects) }
+        return day.runs.filter {
+            runMatchesProject($0, projectFilter: projectFilter, projects: projects)
+        }
     }
 
     private var selectedProject: Project? {
@@ -404,14 +692,18 @@ struct ExperimentDayDetailView: View {
                     Text(headerSummary).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(day.weekday).font(.caption.monospacedDigit().weight(.semibold)).foregroundStyle(.secondary)
+                Text(day.weekday).font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(
+                        .secondary)
             }
 
             if filteredRuns.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Image(systemName: "calendar.badge.plus").font(.title2).foregroundStyle(.teal)
                     Text(projectFilter == nil ? "这一天还没有实验记录" : "这一天没有该项目实验").font(.headline)
-                    Text(projectFilter == nil ? "超过今天后，完成或计划的实验会进入这里。" : "切换到「全部」可查看当天其他项目。").font(.subheadline).foregroundStyle(.secondary)
+                    Text(projectFilter == nil ? "超过今天后，完成或计划的实验会进入这里。" : "切换到「全部」可查看当天其他项目。").font(
+                        .subheadline
+                    ).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
@@ -432,14 +724,21 @@ struct ExperimentDayDetailView: View {
                                     .foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(run.title).font(.subheadline.weight(.semibold))
-                                    Text("\(run.area.rawValue) · \(run.steps.filter { completedStepIDs.contains($0.id) }.count)/\(run.steps.count) 步")
-                                        .font(.caption).foregroundStyle(.secondary)
+                                    Text(
+                                        "\(run.area.rawValue) · \(run.steps.filter { completedStepIDs.contains($0.id) }.count)/\(run.steps.count) 步"
+                                    )
+                                    .font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+                                Image(systemName: "chevron.right").font(.caption.weight(.bold))
+                                    .foregroundStyle(
+                                        .tertiary)
                             }
                             .padding(10)
-                            .background(projectColor(for: run).opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+                            .background(
+                                projectColor(for: run).opacity(0.10),
+                                in: RoundedRectangle(cornerRadius: 8)
+                            )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(projectColor(for: run).opacity(0.18), lineWidth: 1)
@@ -453,7 +752,8 @@ struct ExperimentDayDetailView: View {
         .padding(16)
         .background(Color.labPanel, in: RoundedRectangle(cornerRadius: 8))
         .sheet(item: $selectedRun) { run in
-            PastRunDetailSheet(run: run, completedStepIDs: completedStepIDs, project: project(for: run))
+            PastRunDetailSheet(
+                run: run, completedStepIDs: completedStepIDs, project: project(for: run))
         }
     }
 
@@ -582,7 +882,9 @@ struct ProjectDaysListView: View {
 
     private var matchingDays: [(day: ExperimentDayRecord, runs: [LabRun])] {
         days.compactMap { day in
-            let matching = day.runs.filter { runMatchesProject($0, projectFilter: projectFilter, projects: projects) }
+            let matching = day.runs.filter {
+                runMatchesProject($0, projectFilter: projectFilter, projects: projects)
+            }
             guard !matching.isEmpty else { return nil }
             return (day, matching)
         }
@@ -628,8 +930,10 @@ struct ProjectDaysListView: View {
                                     .foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(run.title).font(.subheadline.weight(.semibold))
-                                    Text("\(run.area.rawValue) · \(run.steps.filter { completedStepIDs.contains($0.id) }.count)/\(run.steps.count) 步")
-                                        .font(.caption).foregroundStyle(.secondary)
+                                    Text(
+                                        "\(run.area.rawValue) · \(run.steps.filter { completedStepIDs.contains($0.id) }.count)/\(run.steps.count) 步"
+                                    )
+                                    .font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
                             }

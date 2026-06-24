@@ -47,7 +47,10 @@ struct Project: Identifiable, Hashable, Codable {
     var endsAt: Date?
     let createdAt: Date
 
-    init(id: String = UUID().uuidString, name: String, colorHex: String, description: String = "", endsAt: Date? = nil, createdAt: Date = Date()) {
+    init(
+        id: String = UUID().uuidString, name: String, colorHex: String, description: String = "",
+        endsAt: Date? = nil, createdAt: Date = Date()
+    ) {
         self.id = id
         self.name = name
         self.colorHex = colorHex
@@ -101,14 +104,18 @@ struct StepReagent: Identifiable, Hashable, Codable {
     var name: String
     var amountExpression: String  // 固定值（"125"）或中文公式（"总体积 * 0.9"）
     var unit: String
-    var isFormula: Bool           // true = 公式模式，false = 固定值模式
+    var isFormula: Bool  // true = 公式模式，false = 固定值模式
 
-    init(id: String = UUID().uuidString, name: String, amountExpression: String, unit: String, isFormula: Bool = false) {
+    init(
+        id: String = UUID().uuidString, name: String, amountExpression: String, unit: String,
+        isFormula: Bool = false
+    ) {
         self.id = id
         self.name = name
         self.amountExpression = amountExpression
         self.unit = unit
-        self.isFormula = amountExpression.contains(where: { $0.isLetter }) && Double(amountExpression) == nil
+        self.isFormula =
+            amountExpression.contains(where: { $0.isLetter }) && Double(amountExpression) == nil
     }
 
     func calculateAmount(variables: [String: Double]) -> Double? {
@@ -125,7 +132,32 @@ struct LabRun: Identifiable, Hashable, Codable {
     let protocolName: String
     let scaledVolumeLabel: String
     var projectID: String?
+    var planDateKey: String?
     let steps: [LabStep]
+
+    init(
+        id: String,
+        title: String,
+        area: WorkflowArea,
+        timeLabel: String,
+        status: String,
+        protocolName: String,
+        scaledVolumeLabel: String,
+        projectID: String?,
+        planDateKey: String? = nil,
+        steps: [LabStep]
+    ) {
+        self.id = id
+        self.title = title
+        self.area = area
+        self.timeLabel = timeLabel
+        self.status = status
+        self.protocolName = protocolName
+        self.scaledVolumeLabel = scaledVolumeLabel
+        self.projectID = projectID
+        self.planDateKey = planDateKey
+        self.steps = steps
+    }
 }
 
 struct ExperimentDayRecord: Identifiable, Hashable, Codable {
@@ -262,7 +294,8 @@ struct ProtocolIngredient: Identifiable, Hashable, Codable {
 
     func scaled(by factor: Double) -> String {
         let amount = isFormula ? (standardAmount * factor) : standardAmount
-        let formatted = amount >= 10 ? String(format: "%.0f", amount) : String(format: "%.2f", amount)
+        let formatted =
+            amount >= 10 ? String(format: "%.0f", amount) : String(format: "%.2f", amount)
         return "\(formatted) \(unit)"
     }
 }
@@ -306,14 +339,14 @@ struct LabProtocol: Identifiable, Hashable, Codable {
 
 struct ProtocolVariable: Identifiable, Hashable, Codable {
     let id: String
-    var symbol: String        // 符号，如 "V_total"
-    var name: String          // 变量名，如 "总体积"
-    var baseValue: Double     // 基准值
+    var symbol: String  // 符号，如 "V_total"
+    var name: String  // 变量名，如 "总体积"
+    var baseValue: Double  // 基准值
     var currentValue: Double  // 当前值（用户调整后）
-    var unit: String          // 单位
-    var isScalable: Bool      // 是否参与同比缩放
-    var minValue: Double      // 最小值
-    var maxValue: Double      // 最大值
+    var unit: String  // 单位
+    var isScalable: Bool  // 是否参与同比缩放
+    var minValue: Double  // 最小值
+    var maxValue: Double  // 最大值
 
     init(
         id: String = UUID().uuidString,
