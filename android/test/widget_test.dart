@@ -1460,6 +1460,32 @@ void main() {
     expect(store.todayRuns.single.title, sampleProtocols.first.name);
   });
 
+  testWidgets('Today timeline swipe delete removes current run', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LabStore();
+    final run = sampleRuns.first.copyWith(id: 'today-swipe-delete');
+    store.todayRuns = [run];
+
+    await tester.pumpWidget(MaterialApp(home: TodayScreen(store: store)));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(IosSwipeDelete).first, const Offset(-140, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('ios-swipe-delete-action')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除实验？'), findsOneWidget);
+    await tester.tap(find.text('删除').last);
+    await tester.pumpAndSettle();
+
+    expect(store.todayRuns, isEmpty);
+    expect(find.text(run.title), findsNothing);
+  });
+
   testWidgets('Today project filter shows projects without runs like iOS', (
     WidgetTester tester,
   ) async {
@@ -4085,7 +4111,7 @@ void main() {
     expect(find.text(sampleProtocols.first.name), findsWidgets);
   });
 
-  testWidgets('Protocol library explicit delete removes protocol and indexes', (
+  testWidgets('Protocol library omits explicit delete button', (
     WidgetTester tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -4098,18 +4124,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: ProtocolScreen(store: store)));
     await tester.pumpAndSettle();
 
-    expect(find.byTooltip('删除 Protocol'), findsOneWidget);
-    await tester.tap(find.byTooltip('删除 Protocol'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('删除 Protocol？'), findsOneWidget);
-    await tester.tap(find.text('删除').last);
-    await tester.pumpAndSettle();
-
-    expect(store.protocols, isEmpty);
-    expect(store.favoriteProtocolIds, isEmpty);
-    expect(store.recentProtocolIds, isEmpty);
-    expect(find.text(protocol.name), findsNothing);
+    expect(find.byTooltip('删除 Protocol'), findsNothing);
+    expect(store.protocols.single.id, protocol.id);
   });
 
   testWidgets('Protocol library swipe delete button removes protocol', (
@@ -4127,7 +4143,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('删除'), findsOneWidget);
-    await tester.tap(find.text('删除'));
+    await tester.tap(find.byKey(const Key('ios-swipe-delete-action')));
     await tester.pumpAndSettle();
 
     expect(find.text('删除 Protocol？'), findsOneWidget);
@@ -4151,7 +4167,6 @@ void main() {
             onFavorite: () {},
             onOpen: () {},
             onEdit: () {},
-            onDelete: () async {},
             onCreateRun: () {},
           ),
         ),

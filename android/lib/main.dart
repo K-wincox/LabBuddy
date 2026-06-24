@@ -403,80 +403,73 @@ class _IosSwipeDeleteState extends State<IosSwipeDelete> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final revealedWidth = constraints.hasBoundedWidth
-            ? math.max(0.0, constraints.maxWidth - _deleteWidth)
-            : null;
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: _revealed
-                      ? GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => _delete(context),
-                          child: Container(
-                            width: _deleteWidth,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFF3B30),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _revealed
+                  ? GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _delete(context),
+                      child: Container(
+                        key: const Key('ios-swipe-delete-action'),
+                        width: _deleteWidth,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFF3B30),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.delete_outline,
+                              color: Colors.white,
+                              size: 23,
                             ),
-                            alignment: Alignment.center,
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.white,
-                                  size: 23,
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  '删除',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ],
+                            SizedBox(height: 2),
+                            Text(
+                              '删除',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ),
-              GestureDetector(
-                behavior: HitTestBehavior.deferToChild,
-                onHorizontalDragUpdate: (details) {
-                  final next = (_offset + details.delta.dx).clamp(
-                    -_deleteWidth,
-                    0.0,
-                  );
-                  if (next != _offset) setState(() => _offset = next);
-                },
-                onHorizontalDragEnd: (details) {
-                  final velocity = details.primaryVelocity ?? 0;
-                  final shouldReveal = velocity < -250 || _offset < -36;
-                  setState(() => _offset = shouldReveal ? -_deleteWidth : 0);
-                },
-                onTap: _revealed ? () => setState(() => _offset = 0) : null,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  transform: Matrix4.translationValues(_offset, 0, 0),
-                  width: _revealed ? revealedWidth : null,
-                  child: widget.child,
-                ),
-              ),
-            ],
+                          ],
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
           ),
-        );
-      },
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            transform: Matrix4.translationValues(_offset, 0, 0),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragUpdate: (details) {
+                final next = (_offset + details.delta.dx).clamp(
+                  -_deleteWidth,
+                  0.0,
+                );
+                if (next != _offset) setState(() => _offset = next);
+              },
+              onHorizontalDragEnd: (details) {
+                final velocity = details.primaryVelocity ?? 0;
+                final shouldReveal = velocity < -250 || _offset < -36;
+                setState(() => _offset = shouldReveal ? -_deleteWidth : 0);
+              },
+              onTap: _revealed ? () => setState(() => _offset = 0) : null,
+              child: widget.child,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1974,11 +1967,14 @@ class _TodayScreenState extends State<TodayScreen> {
                         ),
                       ),
                       showDataCard: (run) => _showDataCard(context, run),
-                      deleteRun: (run) => widget.store.deleteRun(
-                        run.id,
-                        DayMode.tomorrow,
-                        date: selectedFutureDate,
-                      ),
+                      deleteRun: (run) async {
+                        await widget.store.deleteRun(
+                          run.id,
+                          DayMode.tomorrow,
+                          date: selectedFutureDate,
+                        );
+                        if (mounted) setState(() {});
+                      },
                     )
                   : runs.isEmpty
                   ? TodayEmptyState(
@@ -2005,7 +2001,10 @@ class _TodayScreenState extends State<TodayScreen> {
                       showDataCard: (run) => _showDataCard(context, run),
                       deleteRun: mode == DayMode.past
                           ? null
-                          : (run) => widget.store.deleteRun(run.id, mode),
+                          : (run) async {
+                              await widget.store.deleteRun(run.id, mode);
+                              if (mounted) setState(() {});
+                            },
                     ),
             ),
           ],
@@ -2079,7 +2078,7 @@ class LabTimelineView extends StatefulWidget {
   final VoidCallback? endDay;
   final ValueChanged<LabRun> openBench;
   final ValueChanged<LabRun> showDataCard;
-  final ValueChanged<LabRun>? deleteRun;
+  final Future<void> Function(LabRun run)? deleteRun;
 
   @override
   State<LabTimelineView> createState() => _LabTimelineViewState();
@@ -2339,7 +2338,7 @@ class FuturePlanCalendarView extends StatefulWidget {
   final VoidCallback addRun;
   final ValueChanged<LabRun> openBench;
   final ValueChanged<LabRun> showDataCard;
-  final ValueChanged<LabRun> deleteRun;
+  final Future<void> Function(LabRun run) deleteRun;
 
   @override
   State<FuturePlanCalendarView> createState() => _FuturePlanCalendarViewState();
@@ -3592,7 +3591,7 @@ class TimelineHourBlock extends StatelessWidget {
   final ValueChanged<LabRun> showDataCard;
   final ValueChanged<LabRun> editSteps;
   final ValueChanged<LabRun> startStepTimer;
-  final ValueChanged<LabRun>? deleteRun;
+  final Future<void> Function(LabRun run)? deleteRun;
 
   @override
   Widget build(BuildContext context) {
@@ -7016,16 +7015,6 @@ class _ProtocolScreenState extends State<ProtocolScreen> {
                   if (mounted) setState(() {});
                 },
                 onEdit: () => _showProtocolEditor(context, existing: protocol),
-                onDelete: () async {
-                  final ok = await _confirmDelete(
-                    context,
-                    title: '删除 Protocol？',
-                    message: '删除「${protocol.name}」后，不会影响已经创建的实验记录。',
-                  );
-                  if (!ok) return;
-                  await widget.store.deleteProtocol(protocol.id);
-                  if (mounted) setState(() {});
-                },
                 onCreateRun: () async {
                   await widget.store.markProtocolRecent(protocol.id);
                   if (!context.mounted) return;
@@ -7256,7 +7245,6 @@ class ProtocolLibraryTile extends StatelessWidget {
     required this.onFavorite,
     required this.onOpen,
     required this.onEdit,
-    required this.onDelete,
     required this.onCreateRun,
     this.reorderControls,
   });
@@ -7266,7 +7254,6 @@ class ProtocolLibraryTile extends StatelessWidget {
   final VoidCallback onFavorite;
   final VoidCallback onOpen;
   final VoidCallback onEdit;
-  final Future<void> Function() onDelete;
   final VoidCallback onCreateRun;
   final Widget? reorderControls;
 
@@ -7311,20 +7298,6 @@ class ProtocolLibraryTile extends StatelessWidget {
                               Icons.tune,
                               color: _teal,
                               size: 23,
-                            ),
-                          ),
-                        ),
-                        SizedBox.square(
-                          dimension: 34,
-                          child: IconButton(
-                            tooltip: '删除 Protocol',
-                            onPressed: onDelete,
-                            padding: EdgeInsets.zero,
-                            visualDensity: VisualDensity.compact,
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Color(0xFFFF3B30),
-                              size: 22,
                             ),
                           ),
                         ),

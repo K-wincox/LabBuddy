@@ -74,6 +74,7 @@ Recent decisions affecting current work:
 
 | Date | Task | Summary |
 |------|------|---------|
+| 2026-06-24 | Fix global Android left-swipe delete | Reworked the shared Android swipe-delete component, refreshed Today after deletion, removed the extra Protocol delete button, and added Today/Protocol swipe-delete coverage. |
 | 2026-06-24 | Fix Android swipe delete and add future calendar planning | Fixed Android swipe-delete tap handling, added Protocol swipe-delete test coverage, and added future-date calendar planning on Android and iOS. |
 | 2026-06-23 | Fix Android delete actions and future planning calendar | Added explicit Protocol deletion, verified delete flows, and changed Tomorrow into a future-date calendar planner. |
 | 2026-06-23 | Write GitHub download and demo login instructions | Added GitHub-facing Android/iOS download links, install guidance, and preset demo login to README and release docs. |
