@@ -2700,7 +2700,7 @@ class _PastCalendarCardState extends State<PastCalendarCard> {
                   crossAxisCount: 7,
                   mainAxisSpacing: 4,
                   crossAxisSpacing: 4,
-                  childAspectRatio: 1.18 / cellScale,
+                  mainAxisExtent: 42 * cellScale,
                 ),
                 itemBuilder: (context, index) {
                   final day = monthDays[index];
@@ -2823,6 +2823,8 @@ class PastCalendarCell extends StatelessWidget {
     final visibleDots = projectColors.isEmpty && shouldLightDate
         ? [activeColor]
         : projectColors.toList();
+    final markerWidth = selected ? 29.0 : 27.0;
+    final markerHeight = selected ? 28.0 : 24.0;
     final textColor = selected
         ? Colors.white
         : today || shouldLightDate
@@ -2834,7 +2836,7 @@ class PastCalendarCell extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 3),
+        padding: const EdgeInsets.symmetric(vertical: 2),
         decoration: BoxDecoration(
           color: hasRecord || today ? _labInset.withValues(alpha: 0.72) : null,
           borderRadius: BorderRadius.circular(8),
@@ -2850,8 +2852,8 @@ class PastCalendarCell extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 27,
-              height: 24,
+              width: markerWidth,
+              height: markerHeight,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: selected ? activeColor : Colors.transparent,
@@ -2869,7 +2871,7 @@ class PastCalendarCell extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             if (shouldLightDate)
               SizedBox(
                 height: cellScale > 0.75 ? 6 : 2,

@@ -74,6 +74,7 @@ Recent decisions affecting current work:
 
 | Date | Task | Summary |
 |------|------|---------|
+| 2026-06-24 | Fix Android calendar day cell overflow | Removed Flutter debug overflow text from calendar cells by stabilizing row height and selected-date marker spacing. |
 | 2026-06-24 | Fix global Android left-swipe delete | Reworked the shared Android swipe-delete component, refreshed Today after deletion, removed the extra Protocol delete button, and added Today/Protocol swipe-delete coverage. |
 | 2026-06-24 | Fix Android swipe delete and add future calendar planning | Fixed Android swipe-delete tap handling, added Protocol swipe-delete test coverage, and added future-date calendar planning on Android and iOS. |
 | 2026-06-23 | Fix Android delete actions and future planning calendar | Added explicit Protocol deletion, verified delete flows, and changed Tomorrow into a future-date calendar planner. |
