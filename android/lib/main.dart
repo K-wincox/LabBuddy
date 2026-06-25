@@ -7549,6 +7549,8 @@ class _ProtocolExtractionSheetState extends State<ProtocolExtractionSheet> {
   );
   String sourceType = 'SOP';
   String area = '细胞实验';
+  String sourceStatus = '本地解析，导入后立即生成草稿预览';
+  bool isImportingSource = false;
 
   LabProtocol get previewDraft {
     final extracted = ProtocolTextExtractor.extract(
@@ -7616,10 +7618,15 @@ class _ProtocolExtractionSheetState extends State<ProtocolExtractionSheet> {
             const SizedBox(height: 12),
             _ExtractionSourceActionCard(
               sourceType: sourceType,
-              onPickPdf: () => _importDocument(context, title: '导入 PDF/文本'),
+              status: sourceStatus,
+              isImporting: isImportingSource,
+              onPickPdf: () => _importPdfText(context, title: '导入 PDF'),
               onPickText: () => _importDocument(context, title: '导入文本文件'),
-              onPickImage: () => _showOcrTextHint(context),
-              onPasteOcr: () => _focusRawText(context),
+              onCaptureImage: () =>
+                  _importImageText(context, title: '拍照录入', capture: true),
+              onPickImage: () =>
+                  _importImageText(context, title: '上传照片', capture: false),
+              onPasteOcr: () => _pasteClipboardText(context),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -7738,78 +7745,189 @@ class _ProtocolExtractionSheetState extends State<ProtocolExtractionSheet> {
     BuildContext context, {
     required String title,
   }) async {
+    setState(() {
+      isImportingSource = true;
+      sourceStatus = '正在打开文件选择器，超过 4 秒会切换到手动粘贴';
+      sourceType = title.contains('PDF') ? 'PDF' : 'SOP';
+    });
     try {
-      final text = await _dataCardChannel.invokeMethod<String>(
-        'pickTextDocument',
-      );
+      final text = await _dataCardChannel
+          .invokeMethod<String>('pickTextDocument')
+          .timeout(const Duration(seconds: 4));
       if (text == null || text.trim().isEmpty) return;
       setState(() {
         rawTextController.text = text;
         if (sourceTitleController.text == '粘贴文本') {
           sourceTitleController.text = title;
         }
+        sourceStatus = '已导入文本，草稿已用本地规则即时刷新';
       });
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('文本已导入')));
+    } on TimeoutException {
+      setState(() {
+        sourceStatus = 'PDF/文件读取超时：请复制 PDF 文本或 OCR 结果后粘贴';
+      });
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('读取较慢，已切换为粘贴文本模式')));
     } catch (error) {
+      setState(() {
+        sourceStatus = '导入失败：请改用粘贴 OCR / PDF 文本';
+      });
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('导入失败：$error')));
+    } finally {
+      if (mounted) setState(() => isImportingSource = false);
     }
   }
 
-  Future<void> _showOcrTextHint(BuildContext context) async {
+  Future<void> _importPdfText(
+    BuildContext context, {
+    required String title,
+  }) async {
     setState(() {
-      sourceType = 'Image';
+      isImportingSource = true;
+      sourceType = 'PDF';
+      sourceStatus = '正在解析 PDF 前几页，识别较慢时会提示改用粘贴文本';
       if (sourceTitleController.text == '粘贴文本') {
-        sourceTitleController.text = '图片 OCR 文本';
+        sourceTitleController.text = title;
       }
     });
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('图片识别'),
-        content: const Text(
-          '当前 APK 保留与 iOS 一致的图片/OCR 来源入口。请先用系统相册、相机或 OCR 工具复制识别文本，然后粘贴到“提取原文”。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('知道了'),
-          ),
-        ],
-      ),
-    );
+    try {
+      final text = await _dataCardChannel
+          .invokeMethod<String>('recognizePdfText')
+          .timeout(const Duration(seconds: 20));
+      if (text == null || text.trim().isEmpty) {
+        setState(() => sourceStatus = 'PDF 未识别到文字：请复制 PDF 文本后粘贴');
+        return;
+      }
+      setState(() {
+        rawTextController.text = text;
+        sourceStatus = 'PDF 已识别，草稿已用本地规则即时刷新';
+      });
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('PDF 已识别')));
+    } on TimeoutException {
+      setState(() => sourceStatus = 'PDF 解析超时：请复制 PDF 文本后粘贴');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('PDF 解析较慢，已切换为粘贴模式')));
+    } catch (error) {
+      setState(() => sourceStatus = 'PDF 识别失败：请改用粘贴 PDF 文本');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('PDF 识别失败：$error')));
+    } finally {
+      if (mounted) setState(() => isImportingSource = false);
+    }
   }
 
-  void _focusRawText(BuildContext context) {
+  Future<void> _importImageText(
+    BuildContext context, {
+    required String title,
+    required bool capture,
+  }) async {
+    setState(() {
+      isImportingSource = true;
+      sourceType = 'Image';
+      sourceStatus = '$title：正在进行图片文字识别';
+      if (sourceTitleController.text == '粘贴文本') {
+        sourceTitleController.text = '$title OCR 文本';
+      }
+    });
+    try {
+      final method = capture ? 'captureImageText' : 'recognizeImageText';
+      final text = await _dataCardChannel
+          .invokeMethod<String>(method)
+          .timeout(const Duration(seconds: 20));
+      if (text == null || text.trim().isEmpty) {
+        setState(() => sourceStatus = '$title 未识别到文字：请改用粘贴 OCR 文本');
+        return;
+      }
+      setState(() {
+        rawTextController.text = text;
+        sourceStatus = '图片已识别，草稿已刷新';
+      });
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('图片文字已识别')));
+    } on TimeoutException {
+      setState(() => sourceStatus = '$title 识别超时：请先复制系统 OCR 文本后粘贴');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('图片识别较慢，已切换为粘贴模式')));
+    } catch (error) {
+      setState(() => sourceStatus = '$title 识别失败：请改用粘贴 OCR 文本');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('图片识别失败：$error')));
+    } finally {
+      if (mounted) setState(() => isImportingSource = false);
+    }
+  }
+
+  Future<void> _pasteClipboardText(
+    BuildContext context, {
+    bool silentWhenEmpty = false,
+  }) async {
     setState(() {
       sourceType = 'OCR Text';
       if (sourceTitleController.text == '粘贴文本') {
         sourceTitleController.text = 'OCR 文本';
       }
+      sourceStatus = '等待 OCR / PDF 文本粘贴，粘贴后本地即时解析';
     });
+    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = clipboard?.text?.trim() ?? '';
+    if (text.isNotEmpty) {
+      setState(() {
+        rawTextController.text = text;
+        sourceStatus = '已从剪贴板读取文本，草稿已刷新';
+      });
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已粘贴 OCR / PDF 文本')));
+      return;
+    }
+    if (silentWhenEmpty || !context.mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('请粘贴 OCR 后的 Protocol 文本')));
+    ).showSnackBar(const SnackBar(content: Text('剪贴板为空，请粘贴识别后的文本')));
   }
 }
 
 class _ExtractionSourceActionCard extends StatelessWidget {
   const _ExtractionSourceActionCard({
     required this.sourceType,
+    required this.status,
+    required this.isImporting,
     required this.onPickPdf,
     required this.onPickText,
+    required this.onCaptureImage,
     required this.onPickImage,
     required this.onPasteOcr,
   });
 
   final String sourceType;
+  final String status;
+  final bool isImporting;
   final VoidCallback onPickPdf;
   final VoidCallback onPickText;
+  final VoidCallback onCaptureImage;
   final VoidCallback onPickImage;
   final VoidCallback onPasteOcr;
 
@@ -7838,10 +7956,11 @@ class _ExtractionSourceActionCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
-            '导入或粘贴原文后，下方会实时生成草稿预览。',
-            style: TextStyle(color: _muted, fontSize: 12.5),
-          ),
+          Text(status, style: const TextStyle(color: _muted, fontSize: 12.5)),
+          if (isImporting) ...[
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(minHeight: 3),
+          ],
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
@@ -7858,9 +7977,14 @@ class _ExtractionSourceActionCard extends StatelessWidget {
                 label: const Text('导入文本'),
               ),
               OutlinedButton.icon(
-                onPressed: onPickImage,
+                onPressed: onCaptureImage,
                 icon: const Icon(Icons.photo_camera_outlined),
-                label: const Text('图片/OCR'),
+                label: const Text('拍照录入'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onPickImage,
+                icon: const Icon(Icons.photo_library_outlined),
+                label: const Text('上传照片'),
               ),
               OutlinedButton.icon(
                 onPressed: onPasteOcr,
@@ -10917,14 +11041,23 @@ class _ToolsScreenState extends State<ToolsScreen> {
             const SizedBox(height: 18),
             Row(
               children: [
-                Text(
-                  '常用缓冲液 · 培养基模板',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 17,
+                Expanded(
+                  child: Text(
+                    '常用缓冲液 · 培养基模板',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 17,
+                    ),
                   ),
                 ),
-                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => _showDmemExtraction(context),
+                  icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                  label: const Text('DMEM 提取'),
+                ),
+                const SizedBox(width: 6),
                 IosPlusCircleButton(
                   onPressed: () => _showBufferEditor(context),
                 ),
@@ -11435,6 +11568,20 @@ class _ToolsScreenState extends State<ToolsScreen> {
       isScrollControlled: true,
       builder: (_) => BufferTemplateEditorSheet(store: widget.store),
     );
+  }
+
+  Future<void> _showDmemExtraction(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await showModalBottomSheet<BufferTemplate>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DmemExtractionSheet(store: widget.store),
+    );
+    if (saved == null) return;
+    await widget.store.upsertBufferTemplate(saved);
+    if (!mounted) return;
+    setState(() {});
+    messenger.showSnackBar(SnackBar(content: Text('已生成 ${saved.name} 模板')));
   }
 
   Future<void> _showFormulaEditor(
@@ -12033,6 +12180,350 @@ class _BufferTemplateEditorSheetState extends State<BufferTemplateEditorSheet> {
 
   void _removeIngredient(int index) {
     setState(() => ingredients.removeAt(index));
+  }
+}
+
+class DmemExtractionSheet extends StatefulWidget {
+  const DmemExtractionSheet({super.key, required this.store});
+
+  final LabStore store;
+
+  @override
+  State<DmemExtractionSheet> createState() => _DmemExtractionSheetState();
+}
+
+class _DmemExtractionSheetState extends State<DmemExtractionSheet> {
+  final sourceTitleController = TextEditingController(text: 'DMEM 配方');
+  final rawTextController = TextEditingController(
+    text: 'Complete DMEM\nDMEM high glucose 445 ml\nFBS 50 ml\nPen-Strep 5 ml',
+  );
+  String area = '细胞实验';
+  String sourceStatus = '拍照或上传照片后，把系统 OCR 文字粘贴到这里；配方会本地即时提取';
+  bool isImportingSource = false;
+
+  BufferTemplate get previewTemplate => BufferRecipeTextExtractor.extract(
+    text: rawTextController.text,
+    sourceTitle: sourceTitleController.text,
+    area: area,
+  );
+
+  bool get canAccept => previewTemplate.ingredients.isNotEmpty;
+
+  @override
+  void dispose() {
+    sourceTitleController.dispose();
+    rawTextController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final template = previewTemplate;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Text(
+              'DMEM 配方提取',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '从照片 OCR、PDF 文本或手动粘贴内容中提取培养基成分，保存后进入常用缓冲液/培养基模板。',
+              style: TextStyle(color: _muted),
+            ),
+            const SizedBox(height: 12),
+            _ExtractionSourceActionCard(
+              sourceType: 'DMEM / Media',
+              status: sourceStatus,
+              isImporting: isImportingSource,
+              onPickPdf: () => _importPdfText(context, title: 'DMEM PDF'),
+              onPickText: () => _importDocument(context, title: 'DMEM 文本'),
+              onCaptureImage: () =>
+                  _importImageText(context, title: '拍照录入 DMEM', capture: true),
+              onPickImage: () => _importImageText(
+                context,
+                title: '上传 DMEM 照片',
+                capture: false,
+              ),
+              onPasteOcr: () => _pasteClipboardText(context),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: sourceTitleController,
+              decoration: const InputDecoration(labelText: '模板名称 / 来源标题'),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: area,
+              decoration: const InputDecoration(labelText: '实验类型'),
+              items: widget.store.areaOptions
+                  .map(
+                    (item) => DropdownMenuItem(value: item, child: Text(item)),
+                  )
+                  .toList(),
+              onChanged: (value) => setState(() => area = value ?? area),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: rawTextController,
+              decoration: InputDecoration(
+                labelText: 'DMEM / 培养基配方 OCR 文本',
+                suffixIcon: rawTextController.text.trim().isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: '清空',
+                        onPressed: () => setState(rawTextController.clear),
+                        icon: const Icon(Icons.cancel),
+                      ),
+              ),
+              minLines: 7,
+              maxLines: 12,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            _BufferTemplateDraftPreviewCard(template: template),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: canAccept
+                  ? () => Navigator.pop(context, previewTemplate)
+                  : null,
+              icon: const Icon(Icons.check_circle),
+              label: const Text('保存为培养基模板'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close),
+              label: const Text('取消'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _importDocument(
+    BuildContext context, {
+    required String title,
+  }) async {
+    setState(() {
+      isImportingSource = true;
+      sourceStatus = '正在读取文件，超过 4 秒会切换到粘贴模式';
+    });
+    try {
+      final text = await _dataCardChannel
+          .invokeMethod<String>('pickTextDocument')
+          .timeout(const Duration(seconds: 4));
+      if (text == null || text.trim().isEmpty) return;
+      setState(() {
+        rawTextController.text = text;
+        if (sourceTitleController.text == 'DMEM 配方') {
+          sourceTitleController.text = title;
+        }
+        sourceStatus = '已导入文本，DMEM 配方预览已刷新';
+      });
+    } on TimeoutException {
+      setState(() {
+        sourceStatus = 'PDF/文件读取超时：请复制配方文字或 OCR 结果后粘贴';
+      });
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('读取较慢，已切换为粘贴文本模式')));
+    } catch (error) {
+      setState(() => sourceStatus = '导入失败：请改用粘贴 OCR / PDF 文本');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('导入失败：$error')));
+    } finally {
+      if (mounted) setState(() => isImportingSource = false);
+    }
+  }
+
+  Future<void> _importPdfText(
+    BuildContext context, {
+    required String title,
+  }) async {
+    setState(() {
+      isImportingSource = true;
+      sourceStatus = '正在解析 PDF 前几页，识别较慢时会提示改用粘贴文本';
+      if (sourceTitleController.text == 'DMEM 配方') {
+        sourceTitleController.text = title;
+      }
+    });
+    try {
+      final text = await _dataCardChannel
+          .invokeMethod<String>('recognizePdfText')
+          .timeout(const Duration(seconds: 20));
+      if (text == null || text.trim().isEmpty) {
+        setState(() => sourceStatus = 'PDF 未识别到文字：请复制配方文字后粘贴');
+        return;
+      }
+      setState(() {
+        rawTextController.text = text;
+        sourceStatus = 'PDF 已识别，DMEM 配方预览已刷新';
+      });
+    } on TimeoutException {
+      setState(() => sourceStatus = 'PDF 解析超时：请复制配方文字后粘贴');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('PDF 解析较慢，已切换为粘贴模式')));
+    } catch (error) {
+      setState(() => sourceStatus = 'PDF 识别失败：请改用粘贴 PDF 文本');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('PDF 识别失败：$error')));
+    } finally {
+      if (mounted) setState(() => isImportingSource = false);
+    }
+  }
+
+  Future<void> _importImageText(
+    BuildContext context, {
+    required String title,
+    required bool capture,
+  }) async {
+    setState(() {
+      isImportingSource = true;
+      sourceStatus = '$title：正在进行图片文字识别';
+      if (sourceTitleController.text == 'DMEM 配方') {
+        sourceTitleController.text = title;
+      }
+    });
+    try {
+      final method = capture ? 'captureImageText' : 'recognizeImageText';
+      final text = await _dataCardChannel
+          .invokeMethod<String>(method)
+          .timeout(const Duration(seconds: 20));
+      if (text == null || text.trim().isEmpty) {
+        setState(() => sourceStatus = '$title 未识别到文字：请改用粘贴 OCR 文本');
+        return;
+      }
+      setState(() {
+        rawTextController.text = text;
+        sourceStatus = '图片已识别，模板预览已刷新';
+      });
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('图片文字已识别')));
+    } on TimeoutException {
+      setState(() => sourceStatus = '$title 识别超时：请先复制系统 OCR 文本后粘贴');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('图片识别较慢，已切换为粘贴模式')));
+    } catch (error) {
+      setState(() => sourceStatus = '$title 识别失败：请改用粘贴 OCR 文本');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('图片识别失败：$error')));
+    } finally {
+      if (mounted) setState(() => isImportingSource = false);
+    }
+  }
+
+  Future<void> _pasteClipboardText(
+    BuildContext context, {
+    bool silentWhenEmpty = false,
+  }) async {
+    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = clipboard?.text?.trim() ?? '';
+    if (text.isNotEmpty) {
+      setState(() {
+        rawTextController.text = text;
+        sourceStatus = '已从剪贴板读取配方文本，模板预览已刷新';
+      });
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已粘贴配方文本')));
+      return;
+    }
+    setState(() => sourceStatus = '等待 OCR / PDF 配方文本粘贴');
+    if (silentWhenEmpty || !context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('剪贴板为空，请粘贴识别后的配方文本')));
+  }
+}
+
+class _BufferTemplateDraftPreviewCard extends StatelessWidget {
+  const _BufferTemplateDraftPreviewCard({required this.template});
+
+  final BufferTemplate template;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _labPanel,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('模板预览', style: TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Text(
+            template.name,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChipLabel(
+                text: template.area,
+                color: _areaBadgeColor(template.area),
+              ),
+              ChipLabel(
+                text:
+                    '基准 ${_formatNumber(template.baseVolume)} ${template.volumeUnit}',
+              ),
+              ChipLabel(text: '${template.ingredients.length} 个成分'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (template.ingredients.isEmpty)
+            const Text(
+              '未识别到成分，请按 “名称 数值 单位” 输入。',
+              style: TextStyle(color: _muted),
+            )
+          else
+            ...template.ingredients.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _RecipeScaleRow(
+                  name: item.name,
+                  subtitle: item.scalable ? '随目标体积缩放' : '固定用量',
+                  amount: '${_formatNumber(item.amount)} ${item.unit}',
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -21470,6 +21961,151 @@ class FormulaParser {
       code > 127;
 
   bool _isNamePart(int code) => _isNameStart(code) || _isDigit(code);
+}
+
+class BufferRecipeTextExtractor {
+  static BufferTemplate extract({
+    required String text,
+    required String sourceTitle,
+    required String area,
+  }) {
+    final lines = text
+        .split(RegExp(r'[\r\n]+'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    final ingredients = _inferIngredients(lines);
+    final completedIngredients = ingredients.isEmpty && _looksLikeDmem(text)
+        ? _defaultDmemIngredients()
+        : ingredients;
+    return BufferTemplate(
+      id: 'buffer-extracted-${DateTime.now().microsecondsSinceEpoch}',
+      name: _inferName(lines, sourceTitle),
+      area: area,
+      baseVolume: _inferBaseVolume(completedIngredients),
+      volumeUnit: 'ml',
+      ingredients: completedIngredients,
+    );
+  }
+
+  static String _inferName(List<String> lines, String sourceTitle) {
+    final explicit = sourceTitle.trim();
+    if (explicit.isNotEmpty && explicit != 'DMEM 配方') return explicit;
+    final title = lines
+        .map((line) => line.replaceAll(RegExp(r'[:：]$'), '').trim())
+        .firstWhere(
+          (line) =>
+              line.length <= 48 &&
+              !RegExp(
+                r'\d+(?:\.\d+)?\s*(ml|mL|μl|ul|L|mg|g|%)\b',
+                caseSensitive: false,
+              ).hasMatch(line),
+          orElse: () => '',
+        );
+    if (title.isNotEmpty) return title;
+    return _looksLikeDmem(lines.join('\n')) ? 'Complete DMEM' : '培养基模板';
+  }
+
+  static List<BufferIngredient> _inferIngredients(List<String> lines) {
+    final ingredients = <BufferIngredient>[];
+    final pattern = RegExp(
+      r'([A-Za-z0-9α-ωΑ-Ω\u4e00-\u9fa5 /%+\-().]+?)\s*[:：]?\s+(\d+(?:\.\d+)?)\s*(μl|ul|mL|ml|L|mg|g|μg|ug|ng|mM|μM|uM|%)\b',
+      caseSensitive: false,
+    );
+    for (final line in lines) {
+      final match = pattern.firstMatch(line);
+      if (match == null) continue;
+      final name = (match.group(1) ?? '')
+          .replaceFirst(RegExp(r'^[\-•*]\s*'), '')
+          .trim();
+      final amount = double.tryParse(match.group(2) ?? '') ?? 0;
+      final unit = ProtocolTextExtractor._normalizeUnit(match.group(3) ?? '');
+      if (name.isEmpty || amount <= 0) continue;
+      ingredients.add(
+        BufferIngredient(
+          id: _draftId('buffer-ing'),
+          name: _normalizeIngredientName(name),
+          amount: amount,
+          unit: unit,
+          scalable: true,
+        ),
+      );
+    }
+    final seen = <String>{};
+    return ingredients
+        .where((item) {
+          final key = item.name.toLowerCase();
+          if (seen.contains(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .take(16)
+        .toList();
+  }
+
+  static double _inferBaseVolume(List<BufferIngredient> ingredients) {
+    final totalMl = ingredients
+        .map(_volumeInMl)
+        .where((value) => value != null)
+        .cast<double>()
+        .fold<double>(0, (sum, value) => sum + value);
+    if (totalMl > 0) return totalMl;
+    return _looksLikeDmem(ingredients.map((item) => item.name).join(' '))
+        ? 500
+        : 100;
+  }
+
+  static double? _volumeInMl(BufferIngredient ingredient) {
+    final unit = ingredient.unit.toLowerCase();
+    if (unit == 'ml') return ingredient.amount;
+    if (unit == 'l') return ingredient.amount * 1000;
+    if (unit == 'μl' || unit == 'ul') return ingredient.amount / 1000;
+    return null;
+  }
+
+  static String _normalizeIngredientName(String name) {
+    final compact = name.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (RegExp(r'^dmem$', caseSensitive: false).hasMatch(compact)) {
+      return 'DMEM 基础培养基';
+    }
+    if (RegExp(r'^fbs$', caseSensitive: false).hasMatch(compact)) {
+      return 'FBS';
+    }
+    if (RegExp(r'pen.*strep|双抗', caseSensitive: false).hasMatch(compact)) {
+      return 'Pen-Strep / 双抗';
+    }
+    return compact;
+  }
+
+  static bool _looksLikeDmem(String text) {
+    return RegExp(
+      r'dmem|dulbecco|培养基|fbs|pen.?strep|双抗',
+      caseSensitive: false,
+    ).hasMatch(text);
+  }
+
+  static List<BufferIngredient> _defaultDmemIngredients() {
+    return const [
+      BufferIngredient(
+        id: 'dmem-default-base',
+        name: 'DMEM 基础培养基',
+        amount: 445,
+        unit: 'ml',
+      ),
+      BufferIngredient(
+        id: 'dmem-default-fbs',
+        name: 'FBS',
+        amount: 50,
+        unit: 'ml',
+      ),
+      BufferIngredient(
+        id: 'dmem-default-pen-strep',
+        name: 'Pen-Strep / 双抗',
+        amount: 5,
+        unit: 'ml',
+      ),
+    ];
+  }
 }
 
 class ProtocolTextExtractor {

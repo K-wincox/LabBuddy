@@ -922,7 +922,8 @@ void main() {
     expect(find.text('提取 Protocol 草稿'), findsOneWidget);
     expect(find.text('选择 PDF/文本'), findsOneWidget);
     expect(find.text('导入文本'), findsOneWidget);
-    expect(find.text('图片/OCR'), findsOneWidget);
+    expect(find.text('拍照录入'), findsOneWidget);
+    expect(find.text('上传照片'), findsOneWidget);
     expect(find.text('粘贴 OCR'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('草稿预览'),
@@ -938,6 +939,7 @@ void main() {
 
     expect(extracted, isNotNull);
     expect(extracted!.steps, isNotEmpty);
+    expect(extracted!.ingredients.map((item) => item.name), contains('DMEM'));
   });
 
   testWidgets('Protocol detail exposes iOS-style variable adjustment panel', (
@@ -3752,6 +3754,57 @@ void main() {
         (template) => template.id == 'custom-buffer-delete',
       ),
       isFalse,
+    );
+  });
+
+  testWidgets('DMEM extraction saves OCR text as a media template', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LabStore();
+
+    await tester.pumpWidget(MaterialApp(home: ToolsScreen(store: store)));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('DMEM 提取'),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('DMEM 提取'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('DMEM 配方提取'), findsOneWidget);
+    expect(find.text('拍照录入'), findsOneWidget);
+    expect(find.text('上传照片'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('模板预览'),
+      260,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('模板预览'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'DMEM / 培养基配方 OCR 文本'),
+      'Custom DMEM\nDMEM 440 ml\nFBS 55 ml\nPen-Strep 5 ml',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('DMEM 基础培养基'), findsOneWidget);
+    expect(find.text('FBS'), findsOneWidget);
+    expect(find.text('Pen-Strep / 双抗'), findsOneWidget);
+
+    await tester.tap(find.text('保存为培养基模板'));
+    await tester.pumpAndSettle();
+
+    final saved = store.bufferTemplates.last;
+    expect(saved.name, 'Custom DMEM');
+    expect(saved.baseVolume, 500);
+    expect(saved.ingredients.map((item) => item.name), contains('FBS'));
+    expect(
+      saved.ingredients.map((item) => item.name),
+      contains('Pen-Strep / 双抗'),
     );
   });
 

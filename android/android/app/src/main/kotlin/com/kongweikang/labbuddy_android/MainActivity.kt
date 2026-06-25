@@ -19,8 +19,12 @@ import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
@@ -35,9 +39,14 @@ class MainActivity : FlutterActivity() {
     private val pickTextRequestCode = 4207
     private val pickAvatarRequestCode = 4208
     private val pickDataCardImageRequestCode = 4209
+    private val pickOcrImageRequestCode = 4210
+    private val captureOcrImageRequestCode = 4211
+    private val pickOcrPdfRequestCode = 4212
     private var pendingPickTextResult: MethodChannel.Result? = null
     private var pendingPickAvatarResult: MethodChannel.Result? = null
     private var pendingPickDataCardImageResult: MethodChannel.Result? = null
+    private var pendingOcrResult: MethodChannel.Result? = null
+    private var pendingCaptureImageUri: Uri? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -57,6 +66,9 @@ class MainActivity : FlutterActivity() {
                 }
                 "pickDataCardImage" -> pickDataCardImage(result)
                 "pickTextDocument" -> pickTextDocument(result)
+                "recognizeImageText" -> pickOcrImage(result)
+                "captureImageText" -> captureOcrImage(result)
+                "recognizePdfText" -> pickOcrPdf(result)
                 else -> result.notImplemented()
             }
         }
@@ -105,6 +117,19 @@ class MainActivity : FlutterActivity() {
         }
         if (requestCode == pickDataCardImageRequestCode) {
             handleDataCardImageResult(resultCode, data)
+            return
+        }
+        if (requestCode == pickOcrImageRequestCode) {
+            handleOcrImageResult(resultCode, data?.data)
+            return
+        }
+        if (requestCode == captureOcrImageRequestCode) {
+            handleOcrImageResult(resultCode, pendingCaptureImageUri)
+            pendingCaptureImageUri = null
+            return
+        }
+        if (requestCode == pickOcrPdfRequestCode) {
+            handleOcrPdfResult(resultCode, data?.data)
             return
         }
         if (requestCode != pickTextRequestCode) return
@@ -156,6 +181,173 @@ class MainActivity : FlutterActivity() {
         } catch (error: Exception) {
             pendingPickDataCardImageResult = null
             result.error("DATA_CARD_IMAGE_PICK_FAILED", error.message, null)
+        }
+    }
+
+    private fun pickOcrImage(result: MethodChannel.Result) {
+        if (pendingOcrResult != null) {
+            result.error("OCR_IN_PROGRESS", "An OCR import is already running.", null)
+            return
+        }
+        pendingOcrResult = result
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+        }
+        try {
+            startActivityForResult(intent, pickOcrImageRequestCode)
+        } catch (error: Exception) {
+            pendingOcrResult = null
+            result.error("OCR_IMAGE_PICK_FAILED", error.message, null)
+        }
+    }
+
+    private fun captureOcrImage(result: MethodChannel.Result) {
+        if (pendingOcrResult != null) {
+            result.error("OCR_IN_PROGRESS", "An OCR import is already running.", null)
+            return
+        }
+        pendingOcrResult = result
+        val dir = File(cacheDir, "ocr").apply { mkdirs() }
+        val file = File(dir, "ocr-${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+        pendingCaptureImageUri = uri
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, uri)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            startActivityForResult(intent, captureOcrImageRequestCode)
+        } catch (error: Exception) {
+            pendingOcrResult = null
+            pendingCaptureImageUri = null
+            result.error("OCR_CAMERA_FAILED", error.message, null)
+        }
+    }
+
+    private fun pickOcrPdf(result: MethodChannel.Result) {
+        if (pendingOcrResult != null) {
+            result.error("OCR_IN_PROGRESS", "An OCR import is already running.", null)
+            return
+        }
+        pendingOcrResult = result
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/pdf"
+        }
+        try {
+            startActivityForResult(intent, pickOcrPdfRequestCode)
+        } catch (error: Exception) {
+            pendingOcrResult = null
+            result.error("OCR_PDF_PICK_FAILED", error.message, null)
+        }
+    }
+
+    private fun handleOcrImageResult(resultCode: Int, uri: Uri?) {
+        val result = pendingOcrResult ?: return
+        pendingOcrResult = null
+        if (resultCode != Activity.RESULT_OK || uri == null) {
+            result.success(null)
+            return
+        }
+        recognizeImageUri(uri, result)
+    }
+
+    private fun handleOcrPdfResult(resultCode: Int, uri: Uri?) {
+        val result = pendingOcrResult ?: return
+        pendingOcrResult = null
+        if (resultCode != Activity.RESULT_OK || uri == null) {
+            result.success(null)
+            return
+        }
+        recognizePdfUri(uri, result)
+    }
+
+    private fun recognizeImageUri(uri: Uri, result: MethodChannel.Result) {
+        try {
+            val image = InputImage.fromFilePath(this, uri)
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    result.success(visionText.text)
+                }
+                .addOnFailureListener { error ->
+                    result.error("OCR_IMAGE_FAILED", error.message, null)
+                }
+        } catch (error: Exception) {
+            result.error("OCR_IMAGE_FAILED", error.message, null)
+        }
+    }
+
+    private fun recognizePdfUri(uri: Uri, result: MethodChannel.Result) {
+        var descriptor: ParcelFileDescriptor? = null
+        var renderer: android.graphics.pdf.PdfRenderer? = null
+        try {
+            descriptor = contentResolver.openFileDescriptor(uri, "r")
+                ?: throw IllegalStateException("Unable to open selected PDF")
+            renderer = android.graphics.pdf.PdfRenderer(descriptor)
+            val pageCount = minOf(renderer.pageCount, 3)
+            if (pageCount <= 0) {
+                result.success("")
+                renderer.close()
+                descriptor.close()
+                return
+            }
+            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            val pageTexts = MutableList(pageCount) { "" }
+            var remaining = pageCount
+            var completed = false
+
+            fun closeRenderer() {
+                try {
+                    renderer?.close()
+                } catch (_: Exception) {
+                }
+                try {
+                    descriptor?.close()
+                } catch (_: Exception) {
+                }
+            }
+
+            for (index in 0 until pageCount) {
+                val page = renderer.openPage(index)
+                val scale = 2
+                val maxWidth = 1600
+                val width = minOf(page.width * scale, maxWidth)
+                val height = (page.height * (width.toFloat() / page.width)).toInt().coerceAtLeast(1)
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(Color.WHITE)
+                page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.close()
+                recognizer.process(InputImage.fromBitmap(bitmap, 0))
+                    .addOnSuccessListener { visionText ->
+                        if (completed) return@addOnSuccessListener
+                        pageTexts[index] = visionText.text
+                        remaining -= 1
+                        if (remaining == 0) {
+                            completed = true
+                            closeRenderer()
+                            result.success(pageTexts.filter { it.isNotBlank() }.joinToString("\n\n"))
+                        }
+                    }
+                    .addOnFailureListener { error ->
+                        if (completed) return@addOnFailureListener
+                        completed = true
+                        closeRenderer()
+                        result.error("OCR_PDF_FAILED", error.message, null)
+                    }
+            }
+        } catch (error: Exception) {
+            try {
+                renderer?.close()
+            } catch (_: Exception) {
+            }
+            try {
+                descriptor?.close()
+            } catch (_: Exception) {
+            }
+            result.error("OCR_PDF_FAILED", error.message, null)
         }
     }
 
