@@ -3808,6 +3808,43 @@ void main() {
     );
   });
 
+  test(
+    'Buffer recipe extraction handles split OCR lines and Chinese labels',
+    () {
+      final template = BufferRecipeTextExtractor.extract(
+        text: '完全培养基\nDMEM high glucose\n445 mL\n胎牛血清 FBS\n50 ml\n双抗\n5 ml',
+        sourceTitle: 'DMEM 配方',
+        area: '细胞实验',
+      );
+
+      expect(template.name, '完全培养基');
+      expect(template.baseVolume, 500);
+      expect(
+        template.ingredients.map((item) => item.name),
+        contains('DMEM 基础培养基'),
+      );
+      expect(template.ingredients.map((item) => item.name), contains('FBS'));
+      expect(
+        template.ingredients.map((item) => item.name),
+        contains('Pen-Strep / 双抗'),
+      );
+    },
+  );
+
+  test('Protocol extraction handles OCR split reagent amounts', () {
+    final protocol = ProtocolTextExtractor.extract(
+      text:
+          '细胞传代\n1. Wash cells with PBS\n2. Add trypsin for 3 min\nDMEM\n180 ml\nFBS\n20 ml',
+      sourceTitle: 'OCR Protocol',
+      sourceType: 'Image',
+      area: '细胞实验',
+    );
+
+    expect(protocol.steps.length, greaterThanOrEqualTo(2));
+    expect(protocol.ingredients.map((item) => item.name), contains('DMEM'));
+    expect(protocol.ingredients.map((item) => item.name), contains('FBS'));
+  });
+
   testWidgets('Buffer template editor uses iOS-style structured ingredients', (
     WidgetTester tester,
   ) async {

@@ -7756,7 +7756,7 @@ class _ProtocolExtractionSheetState extends State<ProtocolExtractionSheet> {
           .timeout(const Duration(seconds: 4));
       if (text == null || text.trim().isEmpty) return;
       setState(() {
-        rawTextController.text = text;
+        rawTextController.text = OcrTextNormalizer.normalize(text);
         if (sourceTitleController.text == '粘贴文本') {
           sourceTitleController.text = title;
         }
@@ -7808,7 +7808,7 @@ class _ProtocolExtractionSheetState extends State<ProtocolExtractionSheet> {
         return;
       }
       setState(() {
-        rawTextController.text = text;
+        rawTextController.text = OcrTextNormalizer.normalize(text);
         sourceStatus = 'PDF 已识别，草稿已用本地规则即时刷新';
       });
       if (!context.mounted) return;
@@ -7855,7 +7855,7 @@ class _ProtocolExtractionSheetState extends State<ProtocolExtractionSheet> {
         return;
       }
       setState(() {
-        rawTextController.text = text;
+        rawTextController.text = OcrTextNormalizer.normalize(text);
         sourceStatus = '图片已识别，草稿已刷新';
       });
       if (!context.mounted) return;
@@ -7894,7 +7894,7 @@ class _ProtocolExtractionSheetState extends State<ProtocolExtractionSheet> {
     final text = clipboard?.text?.trim() ?? '';
     if (text.isNotEmpty) {
       setState(() {
-        rawTextController.text = text;
+        rawTextController.text = OcrTextNormalizer.normalize(text);
         sourceStatus = '已从剪贴板读取文本，草稿已刷新';
       });
       if (!context.mounted) return;
@@ -12327,7 +12327,7 @@ class _DmemExtractionSheetState extends State<DmemExtractionSheet> {
           .timeout(const Duration(seconds: 4));
       if (text == null || text.trim().isEmpty) return;
       setState(() {
-        rawTextController.text = text;
+        rawTextController.text = OcrTextNormalizer.normalize(text);
         if (sourceTitleController.text == 'DMEM 配方') {
           sourceTitleController.text = title;
         }
@@ -12372,7 +12372,7 @@ class _DmemExtractionSheetState extends State<DmemExtractionSheet> {
         return;
       }
       setState(() {
-        rawTextController.text = text;
+        rawTextController.text = OcrTextNormalizer.normalize(text);
         sourceStatus = 'PDF 已识别，DMEM 配方预览已刷新';
       });
     } on TimeoutException {
@@ -12414,7 +12414,7 @@ class _DmemExtractionSheetState extends State<DmemExtractionSheet> {
         return;
       }
       setState(() {
-        rawTextController.text = text;
+        rawTextController.text = OcrTextNormalizer.normalize(text);
         sourceStatus = '图片已识别，模板预览已刷新';
       });
       if (!context.mounted) return;
@@ -12446,7 +12446,7 @@ class _DmemExtractionSheetState extends State<DmemExtractionSheet> {
     final text = clipboard?.text?.trim() ?? '';
     if (text.isNotEmpty) {
       setState(() {
-        rawTextController.text = text;
+        rawTextController.text = OcrTextNormalizer.normalize(text);
         sourceStatus = '已从剪贴板读取配方文本，模板预览已刷新';
       });
       if (!context.mounted) return;
@@ -21963,17 +21963,41 @@ class FormulaParser {
   bool _isNamePart(int code) => _isNameStart(code) || _isDigit(code);
 }
 
+class OcrTextNormalizer {
+  static String normalize(String text) {
+    return text
+        .replaceAll('\u00A0', ' ')
+        .replaceAll('µ', 'μ')
+        .replaceAll(RegExp(r'[·•]+'), ' ')
+        .replaceAll(RegExp(r'[：︰]'), ':')
+        .replaceAll(RegExp(r'[，,]\s*(?=\d)'), '.')
+        .split(RegExp(r'[\r\n]+'))
+        .map((line) => line.replaceAll(RegExp(r'\s+'), ' ').trim())
+        .where((line) => line.isNotEmpty)
+        .join('\n');
+  }
+
+  static List<String> normalizedLines(String text) => normalize(text)
+      .split(RegExp(r'[\r\n]+'))
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
+
+  static bool looksLikeAmountLine(String line) {
+    return RegExp(
+      r'^\d+(?:\.\d+)?\s*(μl|ul|mL|ml|L|mg|g|μg|ug|ng|mM|μM|uM|%)\b',
+      caseSensitive: false,
+    ).hasMatch(line.trim());
+  }
+}
+
 class BufferRecipeTextExtractor {
   static BufferTemplate extract({
     required String text,
     required String sourceTitle,
     required String area,
   }) {
-    final lines = text
-        .split(RegExp(r'[\r\n]+'))
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList();
+    final lines = OcrTextNormalizer.normalizedLines(text);
     final ingredients = _inferIngredients(lines);
     final completedIngredients = ingredients.isEmpty && _looksLikeDmem(text)
         ? _defaultDmemIngredients()
@@ -22009,10 +22033,17 @@ class BufferRecipeTextExtractor {
   static List<BufferIngredient> _inferIngredients(List<String> lines) {
     final ingredients = <BufferIngredient>[];
     final pattern = RegExp(
-      r'([A-Za-z0-9α-ωΑ-Ω\u4e00-\u9fa5 /%+\-().]+?)\s*[:：]?\s+(\d+(?:\.\d+)?)\s*(μl|ul|mL|ml|L|mg|g|μg|ug|ng|mM|μM|uM|%)\b',
+      r'([A-Za-z0-9α-ωΑ-Ω\u4e00-\u9fa5 /%+\-().]+?)\s*[:\-]?\s+(\d+(?:\.\d+)?)\s*(μl|ul|mL|ml|L|mg|g|μg|ug|ng|mM|μM|uM|%)\b',
       caseSensitive: false,
     );
-    for (final line in lines) {
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (_looksLikeNameOnly(line) &&
+          i + 1 < lines.length &&
+          OcrTextNormalizer.looksLikeAmountLine(lines[i + 1])) {
+        line = '$line ${lines[i + 1]}';
+        i += 1;
+      }
       final match = pattern.firstMatch(line);
       if (match == null) continue;
       final name = (match.group(1) ?? '')
@@ -22065,16 +22096,27 @@ class BufferRecipeTextExtractor {
 
   static String _normalizeIngredientName(String name) {
     final compact = name.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (RegExp(r'^dmem$', caseSensitive: false).hasMatch(compact)) {
+    if (RegExp(r'dmem|dulbecco', caseSensitive: false).hasMatch(compact)) {
       return 'DMEM 基础培养基';
     }
-    if (RegExp(r'^fbs$', caseSensitive: false).hasMatch(compact)) {
+    if (RegExp(r'\bfbs\b|胎牛血清|血清', caseSensitive: false).hasMatch(compact)) {
       return 'FBS';
     }
     if (RegExp(r'pen.*strep|双抗', caseSensitive: false).hasMatch(compact)) {
       return 'Pen-Strep / 双抗';
     }
     return compact;
+  }
+
+  static bool _looksLikeNameOnly(String line) {
+    final trimmed = line.trim();
+    if (trimmed.length < 2 || trimmed.length > 64) return false;
+    if (OcrTextNormalizer.looksLikeAmountLine(trimmed)) return false;
+    if (RegExp(r'\d+(?:\.\d+)?').hasMatch(trimmed)) return false;
+    return RegExp(
+      r'dmem|fbs|pen.?strep|双抗|培养基|血清|glutamine|hepes|pyruvate|pbs',
+      caseSensitive: false,
+    ).hasMatch(trimmed);
   }
 
   static bool _looksLikeDmem(String text) {
@@ -22115,11 +22157,7 @@ class ProtocolTextExtractor {
     required String sourceType,
     required String area,
   }) {
-    final lines = text
-        .split(RegExp(r'[\r\n]+'))
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList();
+    final lines = OcrTextNormalizer.normalizedLines(text);
     final title = _inferTitle(lines, sourceType);
     final steps = _inferSteps(lines);
     final ingredients = _inferIngredients(lines);
@@ -22181,10 +22219,17 @@ class ProtocolTextExtractor {
   static List<ProtocolIngredient> _inferIngredients(List<String> lines) {
     final ingredients = <ProtocolIngredient>[];
     final pattern = RegExp(
-      r'([A-Za-z0-9α-ωΑ-Ω\u4e00-\u9fa5 /%+\-]+?)\s*[:：]?\s+(\d+(?:\.\d+)?)\s*(μl|ul|ml|mL|L|mg|g|μg|ug|ng|mM|μM|uM|%)\b',
+      r'([A-Za-z0-9α-ωΑ-Ω\u4e00-\u9fa5 /%+\-().]+?)\s*[:\-]?\s+(\d+(?:\.\d+)?)\s*(μl|ul|ml|mL|L|mg|g|μg|ug|ng|mM|μM|uM|%)\b',
       caseSensitive: false,
     );
-    for (final line in lines) {
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (BufferRecipeTextExtractor._looksLikeNameOnly(line) &&
+          i + 1 < lines.length &&
+          OcrTextNormalizer.looksLikeAmountLine(lines[i + 1])) {
+        line = '$line ${lines[i + 1]}';
+        i += 1;
+      }
       final match = pattern.firstMatch(line);
       if (match == null) continue;
       final name = (match.group(1) ?? '').trim();

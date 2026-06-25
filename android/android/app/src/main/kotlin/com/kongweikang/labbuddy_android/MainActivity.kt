@@ -24,12 +24,15 @@ import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : FlutterActivity() {
     private val channelName = "labbuddy/data_card"
@@ -266,17 +269,56 @@ class MainActivity : FlutterActivity() {
     private fun recognizeImageUri(uri: Uri, result: MethodChannel.Result) {
         try {
             val image = InputImage.fromFilePath(this, uri)
-            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-            recognizer.process(image)
-                .addOnSuccessListener { visionText ->
-                    result.success(visionText.text)
-                }
-                .addOnFailureListener { error ->
+            recognizeInputImage(image) { text, error ->
+                if (error != null) {
                     result.error("OCR_IMAGE_FAILED", error.message, null)
+                } else {
+                    result.success(text)
                 }
+            }
         } catch (error: Exception) {
             result.error("OCR_IMAGE_FAILED", error.message, null)
         }
+    }
+
+    private fun recognizeInputImage(image: InputImage, onComplete: (String, Exception?) -> Unit) {
+        val recognizers = listOf(
+            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS),
+            TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
+        )
+        val outputs = MutableList(recognizers.size) { "" }
+        val remaining = AtomicInteger(recognizers.size)
+        val completed = AtomicBoolean(false)
+
+        recognizers.forEachIndexed { index, recognizer ->
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    if (completed.get()) return@addOnSuccessListener
+                    outputs[index] = visionText.text
+                    if (remaining.decrementAndGet() == 0 && completed.compareAndSet(false, true)) {
+                        onComplete(mergeRecognizedText(outputs), null)
+                    }
+                }
+                .addOnFailureListener { error ->
+                    if (remaining.decrementAndGet() == 0 && completed.compareAndSet(false, true)) {
+                        val merged = mergeRecognizedText(outputs)
+                        if (merged.isBlank()) {
+                            onComplete("", error)
+                        } else {
+                            onComplete(merged, null)
+                        }
+                    }
+                }
+        }
+    }
+
+    private fun mergeRecognizedText(texts: List<String>): String {
+        val seen = linkedSetOf<String>()
+        texts.flatMap { it.split(Regex("\\r?\\n")) }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .forEach { seen.add(it) }
+        return seen.joinToString("\n")
     }
 
     private fun recognizePdfUri(uri: Uri, result: MethodChannel.Result) {
@@ -293,7 +335,6 @@ class MainActivity : FlutterActivity() {
                 descriptor.close()
                 return
             }
-            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             val pageTexts = MutableList(pageCount) { "" }
             var remaining = pageCount
             var completed = false
@@ -320,23 +361,22 @@ class MainActivity : FlutterActivity() {
                 canvas.drawColor(Color.WHITE)
                 page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                 page.close()
-                recognizer.process(InputImage.fromBitmap(bitmap, 0))
-                    .addOnSuccessListener { visionText ->
-                        if (completed) return@addOnSuccessListener
-                        pageTexts[index] = visionText.text
+                recognizeInputImage(InputImage.fromBitmap(bitmap, 0)) { text, error ->
+                    if (completed) return@recognizeInputImage
+                    if (error == null) {
+                        pageTexts[index] = text
                         remaining -= 1
                         if (remaining == 0) {
                             completed = true
                             closeRenderer()
                             result.success(pageTexts.filter { it.isNotBlank() }.joinToString("\n\n"))
                         }
-                    }
-                    .addOnFailureListener { error ->
-                        if (completed) return@addOnFailureListener
+                    } else {
                         completed = true
                         closeRenderer()
                         result.error("OCR_PDF_FAILED", error.message, null)
                     }
+                }
             }
         } catch (error: Exception) {
             try {

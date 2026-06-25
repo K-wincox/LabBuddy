@@ -74,6 +74,7 @@ Recent decisions affecting current work:
 
 | Date | Task | Summary |
 |------|------|---------|
+| 2026-06-25 | Upgrade Android OCR extraction completeness | Added Chinese OCR, merged multilingual OCR output, normalized OCR text, supported split-line reagent parsing, and verified Android debug APK build. |
 | 2026-06-25 | Improve Android DMEM extraction and Protocol source parsing | Added Android DMEM/media extraction, camera/photo/PDF OCR source flows, bounded PDF OCR, local recipe parsing, and tests. |
 | 2026-06-24 | Fix Android calendar day cell overflow | Removed Flutter debug overflow text from calendar cells by stabilizing row height and selected-date marker spacing. |
 | 2026-06-24 | Fix global Android left-swipe delete | Reworked the shared Android swipe-delete component, refreshed Today after deletion, removed the extra Protocol delete button, and added Today/Protocol swipe-delete coverage. |
